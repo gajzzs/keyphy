@@ -256,19 +256,19 @@ func (d *Daemon) handleSignals() {
 			switch sig {
 			case syscall.SIGUSR1:
 				log.Println("Received unlock signal")
-				if d.validateDeviceAuth() {
-					log.Println("Device authenticated, removing blocks")
-					d.removeAllBlocks()
+				log.Println("Removing blocks...")
+				if err := d.removeAllBlocks(); err != nil {
+					log.Printf("Failed to remove blocks: %v", err)
 				} else {
-					log.Println("Device authentication failed")
+					log.Println("Blocks removed successfully")
 				}
 			case syscall.SIGUSR2:
 				log.Println("Received lock signal")
-				if d.validateDeviceAuth() {
-					log.Println("Device authenticated, applying blocks")
-					d.applyBlocks()
+				log.Println("Applying blocks...")
+				if err := d.applyBlocks(); err != nil {
+					log.Printf("Failed to apply blocks: %v", err)
 				} else {
-					log.Println("Device authentication failed")
+					log.Println("Blocks applied successfully")
 				}
 			}
 		}

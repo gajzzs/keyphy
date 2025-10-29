@@ -88,15 +88,15 @@ func (nb *NetworkBlocker) addToHosts(domain string) error {
 		return err
 	}
 	
-	// Check if domain already blocked
+	// Check if domain already blocked (check for exact keyphy block)
 	hostsContent := string(content)
-	blockEntry := fmt.Sprintf("127.0.0.1 %s", domain)
-	if strings.Contains(hostsContent, blockEntry) {
+	keyphyBlock := fmt.Sprintf("# Keyphy block %s", domain)
+	if strings.Contains(hostsContent, keyphyBlock) {
 		return nil // Already blocked
 	}
 	
-	// Add blocking entries
-	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n", domain, domain, domain, domain)
+	// Add blocking entries with unique marker
+	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n", domain, domain, domain, domain, domain)
 	
 	return os.WriteFile(hostsFile, []byte(newContent), 0644)
 }
@@ -113,14 +113,24 @@ func (nb *NetworkBlocker) removeFromHosts(domain string) error {
 		return err
 	}
 	
-	// Remove lines containing the domain
+	// Remove keyphy block section for this domain
 	lines := strings.Split(string(content), "\n")
 	var newLines []string
+	inKeyphyBlock := false
+	keyphyBlockMarker := fmt.Sprintf("# Keyphy block %s", domain)
 	
 	for _, line := range lines {
-		if !strings.Contains(line, domain) {
-			newLines = append(newLines, line)
+		if line == keyphyBlockMarker {
+			inKeyphyBlock = true
+			continue
 		}
+		if inKeyphyBlock && (strings.Contains(line, domain) || strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0")) {
+			continue // Skip keyphy block lines
+		}
+		if inKeyphyBlock && strings.HasPrefix(line, "#") {
+			inKeyphyBlock = false // End of this block
+		}
+		newLines = append(newLines, line)
 	}
 	
 	newContent := strings.Join(newLines, "\n")
