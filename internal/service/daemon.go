@@ -58,6 +58,8 @@ func (d *Daemon) Start() error {
 	// Create PID file
 	if err := CreatePidFile(); err != nil {
 		log.Printf("Warning: Could not create PID file: %v", err)
+	} else {
+		log.Printf("PID file created: /var/run/keyphy.pid (PID: %d)", os.Getpid())
 	}
 
 	log.Println("Keyphy daemon started successfully")
@@ -70,7 +72,11 @@ func (d *Daemon) Stop() error {
 	d.running = false
 
 	// Remove PID file
-	RemovePidFile()
+	if err := RemovePidFile(); err != nil {
+		log.Printf("Warning: Failed to remove PID file: %v", err)
+	} else {
+		log.Println("PID file removed successfully")
+	}
 
 	// Remove all blocks when stopping
 	return d.removeAllBlocks()

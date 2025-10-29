@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"strings"
 	"github.com/spf13/cobra"
 	"keyphy/internal/blocker"
 	"keyphy/internal/config"
@@ -38,7 +39,7 @@ func NewBlockCommand() *cobra.Command {
 		},
 		&cobra.Command{
 			Use:   "website [domain]",
-			Short: "Block a website",
+			Short: "Block a website (enter domain without www, e.g. youtube.com)",
 			Args:  cobra.ExactArgs(1),
 			DisableFlagsInUseLine: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -275,11 +276,36 @@ func NewServiceCommand() *cobra.Command {
 				if os.Geteuid() != 0 {
 					return fmt.Errorf("daemon must be run as root")
 				}
-				fmt.Println("Starting keyphy daemon...")
+				
+				// Check if daemon is already running
+				if running, _ := service.GetDaemonStatus(); running {
+					return fmt.Errorf("daemon is already running")
+				}
+				
+				return service.StartDaemonBackground()
+			},
+		},
+		&cobra.Command{
+			Use:    "run-daemon",
+			Short:  "Internal command to run daemon (do not use directly)",
+			Hidden: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("daemon must be run as root")
+				}
+				
+				// Check if another daemon is already running
+				if pid, err := service.ReadPidFileExternal(); err == nil {
+					if service.IsProcessRunningExternal(pid) {
+						return fmt.Errorf("daemon already running with PID %d", pid)
+					}
+					// Clean up stale PID file
+					os.Remove("/var/run/keyphy.pid")
+				}
+				
 				if err := daemon.Start(); err != nil {
 					return err
 				}
-				fmt.Println("Keyphy daemon started successfully")
 				// Keep daemon running
 				select {}
 			},
@@ -293,9 +319,18 @@ func NewServiceCommand() *cobra.Command {
 					return fmt.Errorf("stop requires root privileges")
 				}
 				fmt.Println("Stopping keyphy daemon...")
+				
+				// Try to stop via PID file first
 				if err := service.SendStopSignal(); err != nil {
-					return fmt.Errorf("failed to send stop signal: %v", err)
+					fmt.Printf("PID file method failed: %v\n", err)
+					fmt.Println("Attempting to stop all keyphy daemon processes...")
+					
+					// Fallback: kill all keyphy daemon processes
+					if err := service.StopAllDaemons(); err != nil {
+						return fmt.Errorf("failed to stop daemon processes: %v", err)
+					}
 				}
+				
 				fmt.Println("Keyphy daemon stopped successfully")
 				return nil
 			},
