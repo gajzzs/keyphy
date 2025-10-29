@@ -43,6 +43,11 @@ func (d *Daemon) Start() error {
 	d.running = true
 	log.Println("Keyphy daemon starting...")
 
+	// Enable process protection
+	if err := d.enableProcessProtection(); err != nil {
+		log.Printf("Warning: Could not enable process protection: %v", err)
+	}
+
 	// Apply initial blocks
 	if err := d.applyBlocks(); err != nil {
 		return fmt.Errorf("failed to apply blocks: %v", err)
@@ -54,6 +59,7 @@ func (d *Daemon) Start() error {
 	go d.monitorProcesses()
 	go d.monitorConfigFile()
 	go d.handleSignals()
+	go d.selfProtection()
 
 	// Create PID file
 	if err := CreatePidFile(); err != nil {
@@ -281,7 +287,7 @@ func (d *Daemon) monitorProcesses() {
 
 func (d *Daemon) handleSignals() {
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
 
 	for {
 		select {
@@ -305,8 +311,13 @@ func (d *Daemon) handleSignals() {
 				} else {
 					log.Println("Blocks applied successfully")
 				}
-			case syscall.SIGTERM, syscall.SIGINT:
-				log.Println("Received termination signal, shutting down...")
+			case syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL:
+				// Require auth device for termination
+				if !d.validateDeviceAuth() {
+					log.Println("Termination attempt blocked - auth device required")
+					continue // Ignore termination signal
+				}
+				log.Println("Auth device verified, shutting down...")
 				d.Stop()
 				os.Exit(0)
 			}
@@ -345,6 +356,30 @@ func (d *Daemon) monitorConfigFile() {
 				}
 			} else {
 				log.Printf("Config file monitoring error: %v", err)
+			}
+		}
+	}
+}
+
+func (d *Daemon) enableProcessProtection() error {
+	// Set process name to make it harder to identify
+	exec.Command("prctl", "PR_SET_NAME", "[kworker/0:1]").Run()
+	return nil
+}
+
+func (d *Daemon) selfProtection() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-ticker.C:
+			// Restart if killed without auth
+			if !d.running {
+				log.Println("Daemon killed unexpectedly, restarting...")
+				d.Start()
 			}
 		}
 	}
