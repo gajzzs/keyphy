@@ -60,10 +60,6 @@ func (d *Daemon) Start() error {
 }
 
 func (d *Daemon) Stop() error {
-	if !d.running {
-		return fmt.Errorf("daemon not running")
-	}
-
 	log.Println("Stopping keyphy daemon...")
 	d.cancel()
 	d.running = false
@@ -73,6 +69,32 @@ func (d *Daemon) Stop() error {
 
 	// Remove all blocks when stopping
 	return d.removeAllBlocks()
+}
+
+func (d *Daemon) UnlockWithAuth() error {
+	if !d.validateDeviceAuth() {
+		return fmt.Errorf("authentication device not connected or invalid")
+	}
+	
+	log.Println("Device authenticated, removing all blocks")
+	if err := d.removeAllBlocks(); err != nil {
+		return fmt.Errorf("failed to remove blocks: %v", err)
+	}
+	
+	return nil
+}
+
+func (d *Daemon) LockWithAuth() error {
+	if !d.validateDeviceAuth() {
+		return fmt.Errorf("authentication device not connected or invalid")
+	}
+	
+	log.Println("Device authenticated, applying all blocks")
+	if err := d.applyBlocks(); err != nil {
+		return fmt.Errorf("failed to apply blocks: %v", err)
+	}
+	
+	return nil
 }
 
 func (d *Daemon) validateDeviceAuth() bool {
@@ -147,6 +169,8 @@ func (d *Daemon) removeAllBlocks() error {
 func (d *Daemon) monitorDevices() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+	
+	lastDeviceState := false
 
 	for {
 		select {
@@ -155,14 +179,18 @@ func (d *Daemon) monitorDevices() {
 		case <-ticker.C:
 			cfg := config.GetConfig()
 			if cfg.AuthDevice != "" && cfg.AuthKey != "" {
-				if d.validateDeviceAuth() {
-					// Device authenticated - remove blocks
-					log.Println("Auth device authenticated, removing blocks")
-					d.removeAllBlocks()
-				} else {
-					// Device not authenticated - apply blocks
-					log.Println("Auth device not authenticated, applying blocks")
-					d.applyBlocks()
+				currentDeviceState := d.validateDeviceAuth()
+				
+				// Only log state changes
+				if currentDeviceState != lastDeviceState {
+					if currentDeviceState {
+						log.Println("Auth device connected and authenticated")
+					} else {
+						log.Println("Auth device disconnected or authentication failed")
+						// Apply blocks when device is removed
+						d.applyBlocks()
+					}
+					lastDeviceState = currentDeviceState
 				}
 			}
 		}

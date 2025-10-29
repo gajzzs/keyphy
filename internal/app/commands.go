@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"keyphy/internal/config"
@@ -162,7 +163,11 @@ func NewServiceCommand() *cobra.Command {
 				if os.Geteuid() != 0 {
 					return fmt.Errorf("daemon must be run as root")
 				}
-				return daemon.Start()
+				if err := daemon.Start(); err != nil {
+					return err
+				}
+				// Keep daemon running
+				select {}
 			},
 		},
 		&cobra.Command{
@@ -170,6 +175,26 @@ func NewServiceCommand() *cobra.Command {
 			Short: "Stop keyphy daemon",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return daemon.Stop()
+			},
+		},
+		&cobra.Command{
+			Use:   "unlock",
+			Short: "Unlock all blocks (requires auth device)",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("unlock requires root privileges")
+				}
+				return daemon.UnlockWithAuth()
+			},
+		},
+		&cobra.Command{
+			Use:   "lock",
+			Short: "Lock all blocks (requires auth device)",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("lock requires root privileges")
+				}
+				return daemon.LockWithAuth()
 			},
 		},
 		&cobra.Command{
