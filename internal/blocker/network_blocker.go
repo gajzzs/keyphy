@@ -20,14 +20,22 @@ func NewNetworkBlocker() *NetworkBlocker {
 func (nb *NetworkBlocker) BlockWebsite(domain string) error {
 	nb.blockedDomains[domain] = true
 	
-	// Add to /etc/hosts to redirect to localhost
-	if err := nb.addToHosts(domain); err != nil {
-		return fmt.Errorf("failed to add to hosts: %v", err)
+	// Block both domain and www subdomain
+	domains := []string{domain}
+	if !strings.HasPrefix(domain, "www.") {
+		domains = append(domains, "www."+domain)
 	}
 	
-	// Block DNS queries for domain
-	if err := nb.blockDNS(domain); err != nil {
-		return fmt.Errorf("failed to block DNS: %v", err)
+	for _, d := range domains {
+		// Add to /etc/hosts
+		if err := nb.addToHosts(d); err != nil {
+			return fmt.Errorf("failed to add %s to hosts: %v", d, err)
+		}
+		
+		// Block DNS queries
+		if err := nb.blockDNS(d); err != nil {
+			return fmt.Errorf("failed to block DNS for %s: %v", d, err)
+		}
 	}
 	
 	return nil
@@ -79,6 +87,13 @@ func (nb *NetworkBlocker) blockDNS(domain string) error {
 	
 	// Block HTTP connections to domain  
 	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	// Block systemd-resolved on port 53 (127.0.0.53)
+	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", "127.0.0.53", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 	cmd.Run()
 	
 	// Block direct IP access to YouTube (Google IP ranges)
