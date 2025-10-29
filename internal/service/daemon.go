@@ -110,7 +110,11 @@ func (d *Daemon) validateDeviceAuth() bool {
 
 	for _, dev := range devices {
 		if dev.UUID == cfg.AuthDevice {
-			return crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
+			valid, err := crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
+			if err != nil {
+				return false
+			}
+			return valid
 		}
 	}
 	return false
@@ -192,7 +196,9 @@ func (d *Daemon) monitorDevices() {
 					} else {
 						log.Println("Auth device disconnected or authentication failed")
 						// Apply blocks when device is removed
-						d.applyBlocks()
+						if err := d.applyBlocks(); err != nil {
+							log.Printf("Failed to apply blocks after device disconnection: %v", err)
+						}
 					}
 					lastDeviceState = currentDeviceState
 				}

@@ -18,9 +18,13 @@ func GenerateDeviceKey(deviceUUID, deviceName string) string {
 	return hex.EncodeToString(key)
 }
 
-func ValidateDeviceAuth(deviceUUID, deviceName, expectedKey string) bool {
+func ValidateDeviceAuth(deviceUUID, deviceName, expectedKey string) (bool, error) {
+	if deviceUUID == "" || deviceName == "" || expectedKey == "" {
+		return false, fmt.Errorf("device UUID, name, and expected key cannot be empty")
+	}
+	
 	generatedKey := GenerateDeviceKey(deviceUUID, deviceName)
-	return generatedKey == expectedKey
+	return generatedKey == expectedKey, nil
 }
 
 func HashPassword(password string) string {

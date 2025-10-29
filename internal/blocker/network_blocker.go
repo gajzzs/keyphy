@@ -175,7 +175,7 @@ func (nb *NetworkBlocker) addToHosts(domain string) error {
 	// Add blocking entries with unique marker
 	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n", domain, domain, domain, domain, domain)
 	
-	return os.WriteFile(hostsFile, []byte(newContent), 0644)
+	return os.WriteFile(hostsFile, []byte(newContent), 0600)
 }
 
 func (nb *NetworkBlocker) removeFromHosts(domain string) error {
@@ -211,7 +211,7 @@ func (nb *NetworkBlocker) removeFromHosts(domain string) error {
 	}
 	
 	newContent := strings.Join(newLines, "\n")
-	return os.WriteFile(hostsFile, []byte(newContent), 0644)
+	return os.WriteFile(hostsFile, []byte(newContent), 0600)
 }
 
 func (nb *NetworkBlocker) MonitorNetworkTraffic() error {
@@ -339,7 +339,7 @@ func (nb *NetworkBlocker) UnblockAll() error {
 	}
 	
 	newContent := strings.Join(newLines, "\n")
-	return os.WriteFile(hostsFile, []byte(newContent), 0644)
+	return os.WriteFile(hostsFile, []byte(newContent), 0600)
 }
 
 func (nb *NetworkBlocker) removeAllIptablesRules() {

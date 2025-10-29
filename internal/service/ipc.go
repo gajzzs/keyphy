@@ -82,7 +82,11 @@ func validateDeviceBeforeSignal() bool {
 	
 	for _, dev := range devices {
 		if dev.UUID == cfg.AuthDevice {
-			return crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
+			valid, err := crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
+			if err != nil {
+				return false
+			}
+			return valid
 		}
 	}
 	return false

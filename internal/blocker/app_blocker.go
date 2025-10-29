@@ -130,14 +130,23 @@ func (ab *AppBlocker) BlockProcessLaunch(pid int) error {
 	// Send SIGTERM to block process launch
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to find process %d: %v", pid, err)
 	}
 	
-	return process.Signal(syscall.SIGTERM)
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("failed to terminate process %d: %v", pid, err)
+	}
+	
+	return nil
 }
 
 func (ab *AppBlocker) GetRunningProcesses(appName string) ([]int, error) {
 	var pids []int
+	
+	// Sanitize appName to prevent command injection
+	if strings.ContainsAny(appName, ";|&$`(){}[]<>*?~") {
+		return nil, fmt.Errorf("invalid characters in app name: %s", appName)
+	}
 	
 	cmd := exec.Command("pgrep", "-f", appName)
 	output, err := cmd.Output()
