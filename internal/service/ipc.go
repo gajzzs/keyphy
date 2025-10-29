@@ -27,6 +27,13 @@ func SendUnlockSignal() error {
 		return fmt.Errorf("daemon not running: %v", err)
 	}
 	
+	// Check if process is actually running
+	if !isProcessRunning(pid) {
+		// Clean up stale PID file
+		os.Remove("/var/run/keyphy.pid")
+		return fmt.Errorf("daemon not running (stale PID file removed)")
+	}
+	
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("failed to find daemon process: %v", err)
@@ -44,6 +51,13 @@ func SendLockSignal() error {
 	pid, err := readPidFile()
 	if err != nil {
 		return fmt.Errorf("daemon not running: %v", err)
+	}
+	
+	// Check if process is actually running
+	if !isProcessRunning(pid) {
+		// Clean up stale PID file
+		os.Remove("/var/run/keyphy.pid")
+		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
 	process, err := os.FindProcess(pid)
@@ -73,6 +87,17 @@ func validateDeviceBeforeSignal() bool {
 	return false
 }
 
+func isProcessRunning(pid int) bool {
+	// Send signal 0 to check if process exists
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
 func readPidFile() (int, error) {
 	pidFile := "/var/run/keyphy.pid"
 	data, err := os.ReadFile(pidFile)
@@ -80,7 +105,7 @@ func readPidFile() (int, error) {
 		return 0, err
 	}
 	
-	pid, err := strconv.Atoi(string(data))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		return 0, err
 	}
