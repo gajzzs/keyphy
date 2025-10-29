@@ -82,15 +82,15 @@ func isRemovableDevice(devName string) bool {
 }
 
 func getDeviceUUID(devPath string) string {
-	// Try UUID first
-	cmd := exec.Command("blkid", "-s", "UUID", "-o", "value", devPath)
+	// Try UUID first with sudo
+	cmd := exec.Command("sudo", "blkid", "-s", "UUID", "-o", "value", devPath)
 	output, err := cmd.Output()
 	if err == nil && strings.TrimSpace(string(output)) != "" {
 		return strings.TrimSpace(string(output))
 	}
 	
-	// Fallback to PARTUUID
-	cmd = exec.Command("blkid", "-s", "PARTUUID", "-o", "value", devPath)
+	// Fallback to PARTUUID with sudo
+	cmd = exec.Command("sudo", "blkid", "-s", "PARTUUID", "-o", "value", devPath)
 	output, err = cmd.Output()
 	if err == nil && strings.TrimSpace(string(output)) != "" {
 		return strings.TrimSpace(string(output))
@@ -166,7 +166,7 @@ func getEncryptedDeviceInfo(partPath string) (string, string) {
 	
 	for _, mapperDev := range mapperDevs {
 		// Check if mapper device is based on this partition
-		cmd := exec.Command("lsblk", "-no", "PKNAME", mapperDev)
+		cmd := exec.Command("sudo", "lsblk", "-no", "PKNAME", mapperDev)
 		output, err := cmd.Output()
 		if err == nil {
 			parentDev := strings.TrimSpace(string(output))
