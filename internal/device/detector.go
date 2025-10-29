@@ -31,17 +31,22 @@ func ListUSBDevices() ([]Device, error) {
 		// Check if device is removable
 		removablePath := filepath.Join(blockDev, "removable")
 		if data, err := os.ReadFile(removablePath); err == nil {
-			if strings.TrimSpace(string(data)) == "1" {
+			removableFlag := strings.TrimSpace(string(data))
+			fmt.Printf("DEBUG: Device %s removable=%s\n", devName, removableFlag)
+			if removableFlag == "1" {
 				// Check partitions
 				partitions, _ := filepath.Glob(blockDev + "*")
+				fmt.Printf("DEBUG: Found %d partitions for %s\n", len(partitions), devName)
 				for _, partition := range partitions {
 					partName := filepath.Base(partition)
 					partPath := "/dev/" + partName
+					fmt.Printf("DEBUG: Checking partition %s\n", partName)
 					
 					if partName != devName { // Skip the main device, only partitions
 						uuid := getDeviceUUID(partPath)
 						name := getDeviceName("/dev/" + devName)
 						mountPoint := getMountPoint(partPath)
+						fmt.Printf("DEBUG: UUID=%s, Name=%s, Mount=%s\n", uuid, name, mountPoint)
 						
 						// Check for encrypted mapper devices
 						encryptedUUID, encryptedMount := getEncryptedDeviceInfo(partPath)
@@ -49,6 +54,7 @@ func ListUSBDevices() ([]Device, error) {
 							uuid = encryptedUUID
 							mountPoint = encryptedMount
 							name += " (encrypted)"
+							fmt.Printf("DEBUG: Found encrypted: UUID=%s, Mount=%s\n", uuid, mountPoint)
 						}
 						
 						// Always add removable devices, even without UUID
@@ -62,6 +68,7 @@ func ListUSBDevices() ([]Device, error) {
 							MountPoint: mountPoint,
 							DevPath:    partPath,
 						})
+						fmt.Printf("DEBUG: Added device: %+v\n", devices[len(devices)-1])
 					}
 				}
 			}
