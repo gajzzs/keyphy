@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
+	"os/exec"
 	"keyphy/internal/blocker"
 	"keyphy/internal/config"
 	"keyphy/internal/crypto"
