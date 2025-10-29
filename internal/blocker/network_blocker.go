@@ -9,6 +9,8 @@ import (
 
 type NetworkBlocker struct {
 	blockedDomains map[string]bool
+	ipBlocksAdded  bool
+	dohBlocksAdded bool
 }
 
 func NewNetworkBlocker() *NetworkBlocker {
@@ -62,6 +64,11 @@ func (nb *NetworkBlocker) IsBlocked(domain string) bool {
 }
 
 func (nb *NetworkBlocker) blockDNS(domain string) error {
+	// Check if rule already exists to prevent duplicates
+	if nb.ruleExists(domain) {
+		return nil
+	}
+	
 	// Block DNS queries using iptables
 	cmd := exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 	if err := cmd.Run(); err != nil {
@@ -72,13 +79,6 @@ func (nb *NetworkBlocker) blockDNS(domain string) error {
 	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 	if err := cmd.Run(); err != nil {
 		return err
-	}
-	
-	// Block DNS-over-HTTPS (port 443 to known DoH servers)
-	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
-	for _, server := range dohServers {
-		cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
-		cmd.Run() // Ignore errors
 	}
 	
 	// Block HTTPS connections to domain
@@ -96,13 +96,24 @@ func (nb *NetworkBlocker) blockDNS(domain string) error {
 	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 	cmd.Run()
 	
-	// Block direct IP access to YouTube (Google IP ranges)
-	if strings.Contains(domain, "youtube") || strings.Contains(domain, "google") {
+	// Block direct IP access to YouTube (Google IP ranges) - only once
+	if (strings.Contains(domain, "youtube") || strings.Contains(domain, "google")) && !nb.ipBlocksAdded {
 		youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
 		for _, ip := range youtubeIPs {
 			cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", ip, "-j", "DROP")
 			cmd.Run() // Ignore errors
 		}
+		nb.ipBlocksAdded = true
+	}
+	
+	// Block DNS-over-HTTPS servers - only once
+	if !nb.dohBlocksAdded {
+		dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
+		for _, server := range dohServers {
+			cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
+			cmd.Run() // Ignore errors
+		}
+		nb.dohBlocksAdded = true
 	}
 	
 	return nil
@@ -283,30 +294,51 @@ func (nb *NetworkBlocker) UnprotectHostsFile() error {
 	return cmd.Run()
 }
 
+func (nb *NetworkBlocker) ruleExists(domain string) bool {
+	// Check if iptables rule already exists for this domain
+	cmd := exec.Command("iptables", "-C", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	return cmd.Run() == nil
+}
+
 func (nb *NetworkBlocker) UnblockAll() error {
-	// Get copy of blocked domains to iterate over
-	var domains []string
-	for domain := range nb.blockedDomains {
-		domains = append(domains, domain)
-	}
-	
-	// Unblock each domain
-	for _, domain := range domains {
-		if err := nb.UnblockWebsite(domain); err != nil {
-			return fmt.Errorf("failed to unblock %s: %v", domain, err)
-		}
-	}
-	
-	// Flush all keyphy iptables rules as backup
+	// Clear all iptables OUTPUT rules (aggressive cleanup)
 	cmd := exec.Command("iptables", "-F", "OUTPUT")
-	cmd.Run() // Ignore errors
+	cmd.Run()
 	
-	// Remove all DoH server blocks
-	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
-	for _, server := range dohServers {
-		cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
-		cmd.Run()
+	// Clear blocked domains map
+	nb.blockedDomains = make(map[string]bool)
+	nb.ipBlocksAdded = false
+	nb.dohBlocksAdded = false
+	
+	// Clean hosts file
+	nb.UnprotectHostsFile()
+	defer nb.ProtectHostsFile()
+	
+	// Remove all keyphy entries from hosts file
+	hostsFile := "/etc/hosts"
+	content, err := os.ReadFile(hostsFile)
+	if err != nil {
+		return err
 	}
 	
-	return nil
+	lines := strings.Split(string(content), "\n")
+	var newLines []string
+	inKeyphyBlock := false
+	
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# Keyphy block") {
+			inKeyphyBlock = true
+			continue
+		}
+		if inKeyphyBlock && (strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0")) {
+			continue
+		}
+		if inKeyphyBlock && line == "" {
+			inKeyphyBlock = false
+		}
+		newLines = append(newLines, line)
+	}
+	
+	newContent := strings.Join(newLines, "\n")
+	return os.WriteFile(hostsFile, []byte(newContent), 0644)
 }
