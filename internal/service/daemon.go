@@ -52,6 +52,7 @@ func (d *Daemon) Start() error {
 	go d.monitorDevices()
 	go d.monitorNetwork()
 	go d.monitorProcesses()
+	go d.monitorConfigFile()
 	go d.handleSignals()
 
 	// Create PID file
@@ -302,6 +303,42 @@ func (d *Daemon) handleSignals() {
 				log.Println("Received termination signal, shutting down...")
 				d.Stop()
 				os.Exit(0)
+			}
+		}
+	}
+}
+
+func (d *Daemon) monitorConfigFile() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	
+	lastModTime := time.Time{}
+	configFile := "/etc/keyphy/config.json"
+	
+	// Get initial modification time
+	if stat, err := os.Stat(configFile); err == nil {
+		lastModTime = stat.ModTime()
+	}
+	
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-ticker.C:
+			if stat, err := os.Stat(configFile); err == nil {
+				if !stat.ModTime().Equal(lastModTime) {
+					log.Println("WARNING: Config file modification detected!")
+					log.Printf("Previous: %v, Current: %v", lastModTime, stat.ModTime())
+					
+					// Reload config and reapply blocks
+					log.Println("Reloading configuration and reapplying blocks...")
+					config.InitConfig()
+					d.applyBlocks()
+					
+					lastModTime = stat.ModTime()
+				}
+			} else {
+				log.Printf("Config file monitoring error: %v", err)
 			}
 		}
 	}
