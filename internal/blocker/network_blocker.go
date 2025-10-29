@@ -30,16 +30,19 @@ func (nb *NetworkBlocker) BlockWebsite(domain string) error {
 	
 	for _, d := range domains {
 		// Add to /etc/hosts
+		fmt.Printf("Adding %s to hosts file...\n", d)
 		if err := nb.addToHosts(d); err != nil {
 			return fmt.Errorf("failed to add %s to hosts: %v", d, err)
 		}
 		
 		// Block DNS queries
+		fmt.Printf("Creating iptables rules for %s...\n", d)
 		if err := nb.blockDNS(d); err != nil {
 			return fmt.Errorf("failed to block DNS for %s: %v", d, err)
 		}
 	}
 	
+	fmt.Printf("Website blocking rules created successfully for %s\n", domain)
 	return nil
 }
 
@@ -47,15 +50,18 @@ func (nb *NetworkBlocker) UnblockWebsite(domain string) error {
 	delete(nb.blockedDomains, domain)
 	
 	// Remove from /etc/hosts
+	fmt.Printf("Removing %s from hosts file...\n", domain)
 	if err := nb.removeFromHosts(domain); err != nil {
 		return fmt.Errorf("failed to remove from hosts: %v", err)
 	}
 	
 	// Unblock DNS queries
+	fmt.Printf("Removing iptables rules for %s...\n", domain)
 	if err := nb.unblockDNS(domain); err != nil {
 		return fmt.Errorf("failed to unblock DNS: %v", err)
 	}
 	
+	fmt.Printf("Website unblocking completed for %s\n", domain)
 	return nil
 }
 
@@ -302,6 +308,7 @@ func (nb *NetworkBlocker) ruleExists(domain string) bool {
 
 func (nb *NetworkBlocker) UnblockAll() error {
 	// Remove all keyphy-related iptables rules
+	fmt.Println("Removing all iptables rules...")
 	nb.removeAllIptablesRules()
 	
 	// Clear blocked domains map
@@ -310,6 +317,7 @@ func (nb *NetworkBlocker) UnblockAll() error {
 	nb.dohBlocksAdded = false
 	
 	// Clean hosts file
+	fmt.Println("Cleaning hosts file...")
 	nb.UnprotectHostsFile()
 	defer nb.ProtectHostsFile()
 	
@@ -339,7 +347,11 @@ func (nb *NetworkBlocker) UnblockAll() error {
 	}
 	
 	newContent := strings.Join(newLines, "\n")
-	return os.WriteFile(hostsFile, []byte(newContent), 0600)
+	if err := os.WriteFile(hostsFile, []byte(newContent), 0600); err != nil {
+		return err
+	}
+	fmt.Println("All network blocking rules removed successfully")
+	return nil
 }
 
 func (nb *NetworkBlocker) removeAllIptablesRules() {

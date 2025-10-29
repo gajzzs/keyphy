@@ -32,21 +32,21 @@ func ListUSBDevices() ([]Device, error) {
 		removablePath := filepath.Join(blockDev, "removable")
 		if data, err := os.ReadFile(removablePath); err == nil {
 			removableFlag := strings.TrimSpace(string(data))
-			fmt.Printf("DEBUG: Device %s removable=%s\n", devName, removableFlag)
+
 			if removableFlag == "1" {
 				// Check partitions in /dev/
 				partitions, _ := filepath.Glob("/dev/" + devName + "*")
-				fmt.Printf("DEBUG: Found %d partitions for %s\n", len(partitions), devName)
+
 				
 				for _, partPath := range partitions {
 					partName := filepath.Base(partPath)
-					fmt.Printf("DEBUG: Checking partition %s\n", partName)
+
 					
 					if partName != devName { // Skip the main device, only partitions
 						uuid := getDeviceUUID(partPath)
 						name := getDeviceName("/dev/" + devName)
 						mountPoint := getMountPoint(partPath)
-						fmt.Printf("DEBUG: UUID=%s, Name=%s, Mount=%s\n", uuid, name, mountPoint)
+
 						
 						// Check for encrypted mapper devices
 						encryptedUUID, encryptedMount := getEncryptedDeviceInfo(partPath)
@@ -54,7 +54,7 @@ func ListUSBDevices() ([]Device, error) {
 							uuid = encryptedUUID
 							mountPoint = encryptedMount
 							name += " (encrypted)"
-							fmt.Printf("DEBUG: Found encrypted: UUID=%s, Mount=%s\n", uuid, mountPoint)
+
 						}
 						
 						// Always add removable devices, even without UUID
@@ -68,7 +68,7 @@ func ListUSBDevices() ([]Device, error) {
 							MountPoint: mountPoint,
 							DevPath:    partPath,
 						})
-						fmt.Printf("DEBUG: Added device: %+v\n", devices[len(devices)-1])
+
 					}
 				}
 				
@@ -77,7 +77,7 @@ func ListUSBDevices() ([]Device, error) {
 				uuid := getDeviceUUID(diskPath)
 				name := getDeviceName(diskPath)
 				mountPoint := getMountPoint(diskPath)
-				fmt.Printf("DEBUG: Adding whole disk: UUID=%s, Name=%s, Mount=%s\n", uuid, name, mountPoint)
+
 				
 				if uuid == "" {
 					uuid = "NO-UUID-" + devName
@@ -89,7 +89,7 @@ func ListUSBDevices() ([]Device, error) {
 					MountPoint: mountPoint,
 					DevPath:    diskPath,
 				})
-				fmt.Printf("DEBUG: Added whole disk: %+v\n", devices[len(devices)-1])
+
 			}
 		}
 	}

@@ -123,54 +123,76 @@ func (d *Daemon) validateDeviceAuth() bool {
 func (d *Daemon) applyBlocks() error {
 	cfg := config.GetConfig()
 
+	log.Println("Applying blocking rules...")
 	// Block applications
 	for _, app := range cfg.BlockedApps {
+		log.Printf("Blocking application: %s", app)
 		if err := d.appBlocker.BlockApp(app); err != nil {
 			log.Printf("Failed to block app %s: %v", app, err)
+		} else {
+			log.Printf("Successfully blocked application: %s", app)
 		}
 	}
 
 	// Block websites
 	for _, website := range cfg.BlockedWebsites {
+		log.Printf("Blocking website: %s", website)
 		if err := d.networkBlocker.BlockWebsite(website); err != nil {
 			log.Printf("Failed to block website %s: %v", website, err)
+		} else {
+			log.Printf("Successfully blocked website: %s", website)
 		}
 	}
 
 	// Block file paths
 	for _, path := range cfg.BlockedPaths {
+		log.Printf("Blocking path: %s", path)
 		if err := d.fileBlocker.BlockPath(path); err != nil {
 			log.Printf("Failed to block path %s: %v", path, err)
+		} else {
+			log.Printf("Successfully blocked path: %s", path)
 		}
 	}
 
+	log.Println("All blocking rules applied successfully")
 	return nil
 }
 
 func (d *Daemon) removeAllBlocks() error {
 	cfg := config.GetConfig()
 
+	log.Println("Removing all blocking rules...")
 	// Unblock applications
 	for _, app := range cfg.BlockedApps {
+		log.Printf("Unblocking application: %s", app)
 		if err := d.appBlocker.UnblockApp(app); err != nil {
 			log.Printf("Failed to unblock app %s: %v", app, err)
+		} else {
+			log.Printf("Successfully unblocked application: %s", app)
 		}
 	}
 
 	// Unblock websites
 	for _, website := range cfg.BlockedWebsites {
+		log.Printf("Unblocking website: %s", website)
 		if err := d.networkBlocker.UnblockWebsite(website); err != nil {
 			log.Printf("Failed to unblock website %s: %v", website, err)
+		} else {
+			log.Printf("Successfully unblocked website: %s", website)
 		}
 	}
 
 	// Unblock file paths
 	for _, path := range cfg.BlockedPaths {
+		log.Printf("Unblocking path: %s", path)
 		if err := d.fileBlocker.UnblockPath(path); err != nil {
 			log.Printf("Failed to unblock path %s: %v", path, err)
+		} else {
+			log.Printf("Successfully unblocked path: %s", path)
 		}
 	}
 
+	log.Println("All blocking rules removed successfully")
 	return nil
 }
 
