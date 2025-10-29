@@ -85,6 +85,14 @@ func AddBlockedApp(app string) error {
 	return SaveConfig()
 }
 
+func AddBlockedAppWithPath(app, path string) error {
+	UnprotectConfigFile()
+	appEntry := fmt.Sprintf("%s:%s", app, path)
+	config.BlockedApps = append(config.BlockedApps, appEntry)
+	fmt.Printf("Added '%s' with path '%s' to blocked applications in config\n", app, path)
+	return SaveConfig()
+}
+
 func AddBlockedWebsite(website string) error {
 	UnprotectConfigFile()
 	config.BlockedWebsites = append(config.BlockedWebsites, website)

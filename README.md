@@ -37,6 +37,7 @@ Use "keyphy [command] --help" for more information about a command.
 - **System-Level Enforcement**: Cannot be bypassed through normal user operations
 - **Daemon Service**: Continuous monitoring and automatic blocking/unblocking
 
+
 ## Installation
 
 ```bash
@@ -54,6 +55,15 @@ make install
 make service
 ```
 
+Run
+```
+make service
+```
+to make persistent across reboots
+
+Service file: /etc/systemd/system/keyphy.service
+
+Auto-starts on boot when enabled: sudo systemctl enable keyphy
 
 ## Building from Source
 
