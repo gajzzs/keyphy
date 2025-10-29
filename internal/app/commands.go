@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"github.com/spf13/cobra"
+	"keyphy/internal/blocker"
 	"keyphy/internal/config"
 	"keyphy/internal/crypto"
 	"keyphy/internal/device"
@@ -22,6 +23,9 @@ func NewBlockCommand() *cobra.Command {
 			Short: "Block an application",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				if !validateDeviceAuth() {
+					return fmt.Errorf("authentication device not connected or invalid")
+				}
 				return config.AddBlockedApp(args[0])
 			},
 		},
@@ -30,6 +34,9 @@ func NewBlockCommand() *cobra.Command {
 			Short: "Block a website",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				if !validateDeviceAuth() {
+					return fmt.Errorf("authentication device not connected or invalid")
+				}
 				return config.AddBlockedWebsite(args[0])
 			},
 		},
@@ -38,6 +45,9 @@ func NewBlockCommand() *cobra.Command {
 			Short: "Block file or folder access",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				if !validateDeviceAuth() {
+					return fmt.Errorf("authentication device not connected or invalid")
+				}
 				return config.AddBlockedPath(args[0])
 			},
 		},
@@ -52,14 +62,27 @@ func NewUnblockCommand() *cobra.Command {
 		Short: "Remove blocking rule for app, website, or path (use 'all' to remove everything)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !validateDeviceAuth() {
+				return fmt.Errorf("authentication device not connected or invalid")
+			}
 			if args[0] == "all" {
-				// Clear all blocked items from config
+				// Remove active iptables rules
+				networkBlocker := blocker.NewNetworkBlocker()
+				if err := networkBlocker.UnblockAll(); err != nil {
+					fmt.Printf("Warning: Failed to remove iptables rules: %v\n", err)
+				}
+				// Clear config
 				cfg := config.GetConfig()
 				cfg.BlockedApps = []string{}
 				cfg.BlockedWebsites = []string{}
 				cfg.BlockedPaths = []string{}
 				fmt.Println("All blocking rules removed")
 				return config.SaveConfig()
+			}
+			// Remove specific item from active rules and config
+			networkBlocker := blocker.NewNetworkBlocker()
+			if err := networkBlocker.UnblockWebsite(args[0]); err != nil {
+				fmt.Printf("Warning: Failed to remove iptables rules for %s: %v\n", args[0], err)
 			}
 			return config.RemoveBlocked(args[0])
 		},
@@ -200,34 +223,7 @@ func NewServiceCommand() *cobra.Command {
 				return nil
 			},
 		},
-		&cobra.Command{
-			Use:   "unlock",
-			Short: "Unlock all blocks (requires auth device)",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				if os.Geteuid() != 0 {
-					return fmt.Errorf("unlock requires root privileges")
-				}
-				if err := service.SendUnlockSignal(); err != nil {
-					return fmt.Errorf("failed to send unlock signal: %v", err)
-				}
-				fmt.Println("Unlock signal sent to daemon")
-				return nil
-			},
-		},
-		&cobra.Command{
-			Use:   "lock",
-			Short: "Lock all blocks (requires auth device)",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				if os.Geteuid() != 0 {
-					return fmt.Errorf("lock requires root privileges")
-				}
-				if err := service.SendLockSignal(); err != nil {
-					return fmt.Errorf("failed to send lock signal: %v", err)
-				}
-				fmt.Println("Lock signal sent to daemon")
-				return nil
-			},
-		},
+
 		&cobra.Command{
 			Use:   "status",
 			Short: "Check daemon status",
@@ -248,4 +244,61 @@ func NewServiceCommand() *cobra.Command {
 	)
 
 	return cmd
+}
+
+func NewLockCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "lock",
+		Short: "Lock all blocks (requires auth device)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Geteuid() != 0 {
+				return fmt.Errorf("lock requires root privileges")
+			}
+			if err := service.SendLockSignal(); err != nil {
+				return fmt.Errorf("failed to send lock signal: %v", err)
+			}
+			fmt.Println("Lock signal sent to daemon")
+			return nil
+		},
+	}
+}
+
+func NewUnlockCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unlock",
+		Short: "Unlock all blocks (requires auth device)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Geteuid() != 0 {
+				return fmt.Errorf("unlock requires root privileges")
+			}
+			if err := service.SendUnlockSignal(); err != nil {
+				return fmt.Errorf("failed to send unlock signal: %v", err)
+			}
+			fmt.Println("Unlock signal sent to daemon")
+			return nil
+		},
+	}
+}
+
+func validateDeviceAuth() bool {
+	cfg := config.GetConfig()
+	if cfg.AuthDevice == "" || cfg.AuthKey == "" {
+		return false
+	}
+	
+	devices, err := device.ListUSBDevices()
+	if err != nil {
+		return false
+	}
+	
+	for _, dev := range devices {
+		if dev.UUID == cfg.AuthDevice {
+			valid, err := crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
+			if err != nil {
+				return false
+			}
+			return valid
+		}
+	}
+	return false
 }

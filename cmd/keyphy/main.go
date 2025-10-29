@@ -20,6 +20,8 @@ func init() {
 	rootCmd.AddCommand(
 		app.NewBlockCommand(),
 		app.NewUnblockCommand(),
+		app.NewLockCommand(),
+		app.NewUnlockCommand(),
 		app.NewListCommand(),
 		app.NewDeviceCommand(),
 		app.NewServiceCommand(),
