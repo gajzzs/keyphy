@@ -19,7 +19,7 @@ install: build
 
 service:
 	@echo "Installing systemd service..."
-	@sudo tee $(SERVICE_DIR)/keyphy.service > /dev/null <<EOF
+	@sudo sh -c 'cat > $(SERVICE_DIR)/keyphy.service << EOF
 [Unit]
 Description=Keyphy Access Control Daemon
 After=network.target
@@ -32,7 +32,7 @@ User=root
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOF'
 	@sudo systemctl daemon-reload
 	@echo "Service installed. Use 'sudo systemctl enable keyphy' to enable on boot."
 
