@@ -27,8 +27,12 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=$(INSTALL_DIR)/$(BINARY_NAME) service start
+ExecStop=$(INSTALL_DIR)/$(BINARY_NAME) service stop
 Restart=always
+RestartSec=5
 User=root
+KillMode=mixed
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
