@@ -43,14 +43,25 @@ func ListUSBDevices() ([]Device, error) {
 						name := getDeviceName("/dev/" + devName)
 						mountPoint := getMountPoint(partPath)
 						
-						if uuid != "" { // Only add if UUID exists
-							devices = append(devices, Device{
-								UUID:       uuid,
-								Name:       name,
-								MountPoint: mountPoint,
-								DevPath:    partPath,
-							})
+						// Check for encrypted mapper devices
+						encryptedUUID, encryptedMount := getEncryptedDeviceInfo(partPath)
+						if encryptedUUID != "" {
+							uuid = encryptedUUID
+							mountPoint = encryptedMount
+							name += " (encrypted)"
 						}
+						
+						// Always add removable devices, even without UUID
+						if uuid == "" {
+							uuid = "NO-UUID-" + partName // Fallback identifier
+						}
+						
+						devices = append(devices, Device{
+							UUID:       uuid,
+							Name:       name,
+							MountPoint: mountPoint,
+							DevPath:    partPath,
+						})
 					}
 				}
 			}
@@ -71,13 +82,21 @@ func isRemovableDevice(devName string) bool {
 }
 
 func getDeviceUUID(devPath string) string {
-	// Use blkid to get UUID
+	// Try UUID first
 	cmd := exec.Command("blkid", "-s", "UUID", "-o", "value", devPath)
 	output, err := cmd.Output()
-	if err != nil {
-		return ""
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		return strings.TrimSpace(string(output))
 	}
-	return strings.TrimSpace(string(output))
+	
+	// Fallback to PARTUUID
+	cmd = exec.Command("blkid", "-s", "PARTUUID", "-o", "value", devPath)
+	output, err = cmd.Output()
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		return strings.TrimSpace(string(output))
+	}
+	
+	return ""
 }
 
 func getDeviceName(devPath string) string {
@@ -113,7 +132,7 @@ func getDeviceName(devPath string) string {
 }
 
 func getMountPoint(devPath string) string {
-	// Check if device is mounted
+	// Check if device is mounted (including encrypted mounts)
 	file, err := os.Open("/proc/mounts")
 	if err != nil {
 		return "(not mounted)"
@@ -124,11 +143,42 @@ func getMountPoint(devPath string) string {
 	for scanner.Scan() {
 		line := scanner.Text()
 		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[0] == devPath {
-			return fields[1]
+		if len(fields) >= 2 {
+			// Direct mount
+			if fields[0] == devPath {
+				return fields[1]
+			}
+			// Check for encrypted device mounts (veracrypt, luks, etc.)
+			if strings.Contains(fields[0], "mapper/") && strings.Contains(line, filepath.Base(devPath)) {
+				return fields[1] + " (encrypted)"
+			}
 		}
 	}
 	return "(not mounted)"
+}
+
+func getEncryptedDeviceInfo(partPath string) (string, string) {
+	// Check if this partition has an encrypted mapper device
+	mapperDevs, err := filepath.Glob("/dev/mapper/*")
+	if err != nil {
+		return "", ""
+	}
+	
+	for _, mapperDev := range mapperDevs {
+		// Check if mapper device is based on this partition
+		cmd := exec.Command("lsblk", "-no", "PKNAME", mapperDev)
+		output, err := cmd.Output()
+		if err == nil {
+			parentDev := strings.TrimSpace(string(output))
+			if "/dev/"+parentDev == partPath {
+				// Get UUID of encrypted device
+				uuid := getDeviceUUID(mapperDev)
+				mountPoint := getMountPoint(mapperDev)
+				return uuid, mountPoint
+			}
+		}
+	}
+	return "", ""
 }
 
 func IsDeviceConnected(uuid string) bool {
