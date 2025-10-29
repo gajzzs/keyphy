@@ -37,11 +37,14 @@ func ListUSBDevices() ([]Device, error) {
 				// Check partitions in /dev/
 				partitions, _ := filepath.Glob("/dev/" + devName + "*")
 				fmt.Printf("DEBUG: Found %d partitions for %s\n", len(partitions), devName)
+				
+				hasPartitions := false
 				for _, partPath := range partitions {
 					partName := filepath.Base(partPath)
 					fmt.Printf("DEBUG: Checking partition %s\n", partName)
 					
 					if partName != devName { // Skip the main device, only partitions
+						hasPartitions = true
 						uuid := getDeviceUUID(partPath)
 						name := getDeviceName("/dev/" + devName)
 						mountPoint := getMountPoint(partPath)
@@ -69,6 +72,27 @@ func ListUSBDevices() ([]Device, error) {
 						})
 						fmt.Printf("DEBUG: Added device: %+v\n", devices[len(devices)-1])
 					}
+				}
+				
+				// If no partitions found, add the whole disk
+				if !hasPartitions {
+					diskPath := "/dev/" + devName
+					uuid := getDeviceUUID(diskPath)
+					name := getDeviceName(diskPath)
+					mountPoint := getMountPoint(diskPath)
+					fmt.Printf("DEBUG: No partitions, using whole disk: UUID=%s, Name=%s, Mount=%s\n", uuid, name, mountPoint)
+					
+					if uuid == "" {
+						uuid = "NO-UUID-" + devName
+					}
+					
+					devices = append(devices, Device{
+						UUID:       uuid,
+						Name:       name + " (whole disk)",
+						MountPoint: mountPoint,
+						DevPath:    diskPath,
+					})
+					fmt.Printf("DEBUG: Added whole disk: %+v\n", devices[len(devices)-1])
 				}
 			}
 		}
