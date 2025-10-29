@@ -85,7 +85,16 @@ func NewListCommand() *cobra.Command {
 			} else {
 				fmt.Println("Auth Key: [NOT SET]")
 			}
-			fmt.Printf("Service Enabled: %t\n", cfg.ServiceEnabled)
+			
+			// Show actual service status instead of config flag
+			running, _ := service.GetDaemonStatus()
+			serviceStatus := service.GetServiceStatus()
+			if running {
+				fmt.Println("Service Status: Running")
+			} else {
+				fmt.Println("Service Status: Stopped")
+			}
+			fmt.Printf("Systemd Status: %s", serviceStatus)
 			
 			return nil
 		},
@@ -182,7 +191,11 @@ func NewServiceCommand() *cobra.Command {
 				if os.Geteuid() != 0 {
 					return fmt.Errorf("unlock requires root privileges")
 				}
-				return daemon.UnlockWithAuth()
+				if err := service.SendUnlockSignal(); err != nil {
+					return fmt.Errorf("failed to send unlock signal: %v", err)
+				}
+				fmt.Println("Unlock signal sent to daemon")
+				return nil
 			},
 		},
 		&cobra.Command{
@@ -192,7 +205,11 @@ func NewServiceCommand() *cobra.Command {
 				if os.Geteuid() != 0 {
 					return fmt.Errorf("lock requires root privileges")
 				}
-				return daemon.LockWithAuth()
+				if err := service.SendLockSignal(); err != nil {
+					return fmt.Errorf("failed to send lock signal: %v", err)
+				}
+				fmt.Println("Lock signal sent to daemon")
+				return nil
 			},
 		},
 		&cobra.Command{
