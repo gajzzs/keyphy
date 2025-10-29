@@ -301,9 +301,8 @@ func (nb *NetworkBlocker) ruleExists(domain string) bool {
 }
 
 func (nb *NetworkBlocker) UnblockAll() error {
-	// Clear all iptables OUTPUT rules (aggressive cleanup)
-	cmd := exec.Command("iptables", "-F", "OUTPUT")
-	cmd.Run()
+	// Remove all keyphy-related iptables rules
+	nb.removeAllIptablesRules()
 	
 	// Clear blocked domains map
 	nb.blockedDomains = make(map[string]bool)
@@ -341,4 +340,72 @@ func (nb *NetworkBlocker) UnblockAll() error {
 	
 	newContent := strings.Join(newLines, "\n")
 	return os.WriteFile(hostsFile, []byte(newContent), 0644)
+}
+
+func (nb *NetworkBlocker) removeAllIptablesRules() {
+	// Remove all Google IP blocks
+	youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
+	for _, ip := range youtubeIPs {
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP")
+			if cmd.Run() != nil {
+				break // No more rules to delete
+			}
+		}
+	}
+	
+	// Remove all DoH server blocks
+	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
+	for _, server := range dohServers {
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+	}
+	
+	// Remove all string matching rules (DNS, HTTP, HTTPS)
+	domains := []string{"youtube.com", "www.youtube.com"}
+	for _, domain := range domains {
+		// Remove DNS rules
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+		// Remove HTTP/HTTPS rules
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "443", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+		// Remove systemd-resolved rules
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+		for {
+			cmd := exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+			if cmd.Run() != nil {
+				break
+			}
+		}
+	}
 }
