@@ -38,13 +38,11 @@ func ListUSBDevices() ([]Device, error) {
 				partitions, _ := filepath.Glob("/dev/" + devName + "*")
 				fmt.Printf("DEBUG: Found %d partitions for %s\n", len(partitions), devName)
 				
-				hasPartitions := false
 				for _, partPath := range partitions {
 					partName := filepath.Base(partPath)
 					fmt.Printf("DEBUG: Checking partition %s\n", partName)
 					
 					if partName != devName { // Skip the main device, only partitions
-						hasPartitions = true
 						uuid := getDeviceUUID(partPath)
 						name := getDeviceName("/dev/" + devName)
 						mountPoint := getMountPoint(partPath)
