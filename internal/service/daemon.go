@@ -209,6 +209,10 @@ func (d *Daemon) monitorNetwork() {
 			if err := d.networkBlocker.MonitorNetworkTraffic(); err != nil {
 				log.Printf("Network monitoring error: %v", err)
 			}
+			// Monitor hosts file integrity
+			if err := d.networkBlocker.VerifyHostsFile(); err != nil {
+				log.Printf("Hosts file verification failed: %v", err)
+			}
 		}
 	}
 }

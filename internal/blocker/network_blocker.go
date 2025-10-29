@@ -77,6 +77,10 @@ func (nb *NetworkBlocker) unblockDNS(domain string) error {
 }
 
 func (nb *NetworkBlocker) addToHosts(domain string) error {
+	// Temporarily remove immutable flag
+	nb.UnprotectHostsFile()
+	defer nb.ProtectHostsFile()
+	
 	// Read current hosts file
 	hostsFile := "/etc/hosts"
 	content, err := os.ReadFile(hostsFile)
@@ -98,6 +102,10 @@ func (nb *NetworkBlocker) addToHosts(domain string) error {
 }
 
 func (nb *NetworkBlocker) removeFromHosts(domain string) error {
+	// Temporarily remove immutable flag
+	nb.UnprotectHostsFile()
+	defer nb.ProtectHostsFile()
+	
 	// Read current hosts file
 	hostsFile := "/etc/hosts"
 	content, err := os.ReadFile(hostsFile)
@@ -152,4 +160,49 @@ func (nb *NetworkBlocker) blockConnection(connection string) error {
 	// Extract connection details and block using iptables
 	// This is a simplified implementation
 	return nil
+}
+
+func (nb *NetworkBlocker) VerifyHostsFile() error {
+	// Check if blocked domains are still in hosts file
+	hostsFile := "/etc/hosts"
+	content, err := os.ReadFile(hostsFile)
+	if err != nil {
+		return err
+	}
+	
+	hostsContent := string(content)
+	modified := false
+	
+	// Check each blocked domain
+	for domain := range nb.blockedDomains {
+		blockEntry := fmt.Sprintf("127.0.0.1 %s", domain)
+		if !strings.Contains(hostsContent, blockEntry) {
+			// Domain block was removed, restore it
+			if err := nb.addToHosts(domain); err != nil {
+				return fmt.Errorf("failed to restore hosts entry for %s: %v", domain, err)
+			}
+			modified = true
+		}
+	}
+	
+	if modified {
+		// Also restore DNS blocks
+		for domain := range nb.blockedDomains {
+			nb.blockDNS(domain)
+		}
+	}
+	
+	return nil
+}
+
+func (nb *NetworkBlocker) ProtectHostsFile() error {
+	// Make hosts file immutable to prevent tampering
+	cmd := exec.Command("chattr", "+i", "/etc/hosts")
+	return cmd.Run()
+}
+
+func (nb *NetworkBlocker) UnprotectHostsFile() error {
+	// Remove immutable flag from hosts file
+	cmd := exec.Command("chattr", "-i", "/etc/hosts")
+	return cmd.Run()
 }
