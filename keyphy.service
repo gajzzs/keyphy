@@ -1,0 +1,16 @@
+[Unit]
+Description=Keyphy Access Control Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/keyphy service start
+ExecStop=/usr/local/bin/keyphy service stop
+Restart=always
+RestartSec=5
+User=root
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

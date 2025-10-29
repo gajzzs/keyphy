@@ -3,7 +3,7 @@ BUILD_DIR=build
 INSTALL_DIR=/usr/local/bin
 SERVICE_DIR=/etc/systemd/system
 
-.PHONY: build install uninstall clean service
+.PHONY: build install uninstall clean service test deps
 
 build:
 	@echo "Building keyphy..."
@@ -19,24 +19,7 @@ install: build
 
 service:
 	@echo "Installing systemd service..."
-	@sudo sh -c 'cat > $(SERVICE_DIR)/keyphy.service << EOF
-[Unit]
-Description=Keyphy Access Control Daemon
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=$(INSTALL_DIR)/$(BINARY_NAME) service start
-ExecStop=$(INSTALL_DIR)/$(BINARY_NAME) service stop
-Restart=always
-RestartSec=5
-User=root
-KillMode=mixed
-TimeoutStopSec=30
-
-[Install]
-WantedBy=multi-user.target
-EOF'
+	@sudo cp keyphy.service $(SERVICE_DIR)/
 	@sudo systemctl daemon-reload
 	@echo "Service installed. Use 'sudo systemctl enable keyphy' to enable on boot."
 
@@ -60,4 +43,4 @@ test:
 deps:
 	@echo "Installing dependencies..."
 	@go mod tidy
-	@go mod download
+	@go mod download%
