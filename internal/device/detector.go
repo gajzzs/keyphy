@@ -74,26 +74,24 @@ func ListUSBDevices() ([]Device, error) {
 					}
 				}
 				
-				// If no partitions found, add the whole disk
-				if !hasPartitions {
-					diskPath := "/dev/" + devName
-					uuid := getDeviceUUID(diskPath)
-					name := getDeviceName(diskPath)
-					mountPoint := getMountPoint(diskPath)
-					fmt.Printf("DEBUG: No partitions, using whole disk: UUID=%s, Name=%s, Mount=%s\n", uuid, name, mountPoint)
-					
-					if uuid == "" {
-						uuid = "NO-UUID-" + devName
-					}
-					
-					devices = append(devices, Device{
-						UUID:       uuid,
-						Name:       name + " (whole disk)",
-						MountPoint: mountPoint,
-						DevPath:    diskPath,
-					})
-					fmt.Printf("DEBUG: Added whole disk: %+v\n", devices[len(devices)-1])
+				// Always also add the whole disk as an option
+				diskPath := "/dev/" + devName
+				uuid := getDeviceUUID(diskPath)
+				name := getDeviceName(diskPath)
+				mountPoint := getMountPoint(diskPath)
+				fmt.Printf("DEBUG: Adding whole disk: UUID=%s, Name=%s, Mount=%s\n", uuid, name, mountPoint)
+				
+				if uuid == "" {
+					uuid = "NO-UUID-" + devName
 				}
+				
+				devices = append(devices, Device{
+					UUID:       uuid,
+					Name:       name + " (whole disk)",
+					MountPoint: mountPoint,
+					DevPath:    diskPath,
+				})
+				fmt.Printf("DEBUG: Added whole disk: %+v\n", devices[len(devices)-1])
 			}
 		}
 	}
@@ -121,6 +119,13 @@ func getDeviceUUID(devPath string) string {
 	
 	// Fallback to PARTUUID with sudo
 	cmd = exec.Command("sudo", "blkid", "-s", "PARTUUID", "-o", "value", devPath)
+	output, err = cmd.Output()
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		return strings.TrimSpace(string(output))
+	}
+	
+	// Fallback to PTUUID for whole disks
+	cmd = exec.Command("sudo", "blkid", "-s", "PTUUID", "-o", "value", devPath)
 	output, err = cmd.Output()
 	if err == nil && strings.TrimSpace(string(output)) != "" {
 		return strings.TrimSpace(string(output))
