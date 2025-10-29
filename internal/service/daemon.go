@@ -246,7 +246,7 @@ func (d *Daemon) monitorProcesses() {
 
 func (d *Daemon) handleSignals() {
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2)
+	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGINT)
 
 	for {
 		select {
@@ -270,6 +270,10 @@ func (d *Daemon) handleSignals() {
 				} else {
 					log.Println("Blocks applied successfully")
 				}
+			case syscall.SIGTERM, syscall.SIGINT:
+				log.Println("Received termination signal, shutting down...")
+				d.Stop()
+				os.Exit(0)
 			}
 		}
 	}

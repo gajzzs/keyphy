@@ -99,6 +99,28 @@ func isProcessRunning(pid int) bool {
 	return err == nil
 }
 
+func SendStopSignal() error {
+	pid, err := readPidFile()
+	if err != nil {
+		return fmt.Errorf("daemon not running: %v", err)
+	}
+	
+	// Check if process is actually running
+	if !isProcessRunning(pid) {
+		// Clean up stale PID file
+		os.Remove("/var/run/keyphy.pid")
+		return fmt.Errorf("daemon not running (stale PID file removed)")
+	}
+	
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("failed to find daemon process: %v", err)
+	}
+	
+	// Send SIGTERM to gracefully stop daemon
+	return process.Signal(syscall.SIGTERM)
+}
+
 func readPidFile() (int, error) {
 	pidFile := "/var/run/keyphy.pid"
 	data, err := os.ReadFile(pidFile)

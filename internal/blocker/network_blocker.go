@@ -111,10 +111,33 @@ func (nb *NetworkBlocker) blockDNS(domain string) error {
 func (nb *NetworkBlocker) unblockDNS(domain string) error {
 	// Remove DNS blocking rules
 	cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run() // Ignore errors if rule doesn't exist
+	cmd.Run()
 	
 	cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run() // Ignore errors if rule doesn't exist
+	cmd.Run()
+	
+	// Remove HTTPS/HTTP blocking
+	cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "443", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	// Remove systemd-resolved blocks
+	cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	// Remove IP blocks for YouTube
+	if strings.Contains(domain, "youtube") || strings.Contains(domain, "google") {
+		youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
+		for _, ip := range youtubeIPs {
+			cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP")
+			cmd.Run()
+		}
+	}
 	
 	return nil
 }
@@ -258,4 +281,32 @@ func (nb *NetworkBlocker) UnprotectHostsFile() error {
 	// Remove immutable flag from hosts file
 	cmd := exec.Command("chattr", "-i", "/etc/hosts")
 	return cmd.Run()
+}
+
+func (nb *NetworkBlocker) UnblockAll() error {
+	// Get copy of blocked domains to iterate over
+	var domains []string
+	for domain := range nb.blockedDomains {
+		domains = append(domains, domain)
+	}
+	
+	// Unblock each domain
+	for _, domain := range domains {
+		if err := nb.UnblockWebsite(domain); err != nil {
+			return fmt.Errorf("failed to unblock %s: %v", domain, err)
+		}
+	}
+	
+	// Flush all keyphy iptables rules as backup
+	cmd := exec.Command("iptables", "-F", "OUTPUT")
+	cmd.Run() // Ignore errors
+	
+	// Remove all DoH server blocks
+	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
+	for _, server := range dohServers {
+		cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
+		cmd.Run()
+	}
+	
+	return nil
 }

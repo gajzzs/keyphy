@@ -49,9 +49,18 @@ func NewBlockCommand() *cobra.Command {
 func NewUnblockCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "unblock [item]",
-		Short: "Remove blocking rule for app, website, or path",
+		Short: "Remove blocking rule for app, website, or path (use 'all' to remove everything)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if args[0] == "all" {
+				// Clear all blocked items from config
+				cfg := config.GetConfig()
+				cfg.BlockedApps = []string{}
+				cfg.BlockedWebsites = []string{}
+				cfg.BlockedPaths = []string{}
+				fmt.Println("All blocking rules removed")
+				return config.SaveConfig()
+			}
 			return config.RemoveBlocked(args[0])
 		},
 	}
@@ -181,7 +190,14 @@ func NewServiceCommand() *cobra.Command {
 			Use:   "stop",
 			Short: "Stop keyphy daemon",
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return daemon.Stop()
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("stop requires root privileges")
+				}
+				if err := service.SendStopSignal(); err != nil {
+					return fmt.Errorf("failed to send stop signal: %v", err)
+				}
+				fmt.Println("Stop signal sent to daemon")
+				return nil
 			},
 		},
 		&cobra.Command{
