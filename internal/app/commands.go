@@ -3,8 +3,6 @@ package app
 import (
 	"fmt"
 	"os"
-	"time"
-
 	"github.com/spf13/cobra"
 	"keyphy/internal/config"
 	"keyphy/internal/crypto"
