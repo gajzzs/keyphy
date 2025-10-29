@@ -62,7 +62,35 @@ func (nb *NetworkBlocker) blockDNS(domain string) error {
 	
 	// Also block TCP DNS
 	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	
+	// Block DNS-over-HTTPS (port 443 to known DoH servers)
+	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
+	for _, server := range dohServers {
+		cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
+		cmd.Run() // Ignore errors
+	}
+	
+	// Block HTTPS connections to domain
+	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "443", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	// Block HTTP connections to domain  
+	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	cmd.Run()
+	
+	// Block direct IP access to YouTube (Google IP ranges)
+	if strings.Contains(domain, "youtube") || strings.Contains(domain, "google") {
+		youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
+		for _, ip := range youtubeIPs {
+			cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", ip, "-j", "DROP")
+			cmd.Run() // Ignore errors
+		}
+	}
+	
+	return nil
 }
 
 func (nb *NetworkBlocker) unblockDNS(domain string) error {
