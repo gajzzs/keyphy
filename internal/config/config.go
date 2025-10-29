@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -37,6 +38,8 @@ func InitConfig() error {
 			return err
 		}
 		return json.Unmarshal(data, config)
+	} else {
+		fmt.Println("Creating keyphy configuration file...")
 	}
 
 	return SaveConfig()
@@ -51,21 +54,28 @@ func SaveConfig() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ConfigFile, data, 0644)
+	if err := os.WriteFile(ConfigFile, data, 0644); err != nil {
+		return err
+	}
+	fmt.Println("Configuration saved successfully")
+	return nil
 }
 
 func AddBlockedApp(app string) error {
 	config.BlockedApps = append(config.BlockedApps, app)
+	fmt.Printf("Added '%s' to blocked applications in config\n", app)
 	return SaveConfig()
 }
 
 func AddBlockedWebsite(website string) error {
 	config.BlockedWebsites = append(config.BlockedWebsites, website)
+	fmt.Printf("Added '%s' to blocked websites in config\n", website)
 	return SaveConfig()
 }
 
 func AddBlockedPath(path string) error {
 	config.BlockedPaths = append(config.BlockedPaths, path)
+	fmt.Printf("Added '%s' to blocked paths in config\n", path)
 	return SaveConfig()
 }
 
