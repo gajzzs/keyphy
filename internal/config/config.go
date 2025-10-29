@@ -66,6 +66,8 @@ func SaveConfig() error {
 	if err != nil {
 		return err
 	}
+	
+	UnprotectConfigFile()
 	// Use more restrictive permissions (root only)
 	if err := os.WriteFile(ConfigFile, data, 0600); err != nil {
 		return err
