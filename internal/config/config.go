@@ -11,6 +11,7 @@ type Config struct {
 	BlockedWebsites []string `json:"blocked_websites"`
 	BlockedPaths    []string `json:"blocked_paths"`
 	AuthDevice      string   `json:"auth_device"`
+	AuthKey         string   `json:"auth_key"`
 	ServiceEnabled  bool     `json:"service_enabled"`
 }
 
