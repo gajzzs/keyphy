@@ -13,6 +13,9 @@ type Config struct {
 	BlockedPaths    []string `json:"blocked_paths"`
 	AuthDevice      string   `json:"auth_device"`
 	AuthKey         string   `json:"auth_key"`
+	AuthDeviceName  string   `json:"auth_device_name"`
+	AuthMountState  string   `json:"auth_mount_state"`
+	EnforceState    bool     `json:"enforce_state"`
 }
 
 var (
