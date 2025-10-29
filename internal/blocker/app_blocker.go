@@ -34,6 +34,39 @@ func (ab *AppBlocker) BlockApp(appName string) error {
 
 func (ab *AppBlocker) UnblockApp(appName string) error {
 	delete(ab.blockedApps, appName)
+	return ab.restoreOriginalExecutable(appName)
+}
+
+func (ab *AppBlocker) restoreOriginalExecutable(appName string) error {
+	// Find the executable path
+	execPath, err := exec.LookPath(appName)
+	if err != nil {
+		commonPaths := []string{
+			"/usr/bin/" + appName,
+			"/usr/local/bin/" + appName,
+			"/snap/bin/" + appName,
+		}
+		for _, path := range commonPaths {
+			if _, err := os.Stat(path + ".keyphy-backup"); err == nil {
+				execPath = path
+				break
+			}
+		}
+		if execPath == "" {
+			return nil // No backup found, nothing to restore
+		}
+	}
+	
+	// Restore from backup
+	backupPath := execPath + ".keyphy-backup"
+	if _, err := os.Stat(backupPath); err == nil {
+		if err := exec.Command("cp", backupPath, execPath).Run(); err != nil {
+			return fmt.Errorf("failed to restore executable: %v", err)
+		}
+		// Remove backup
+		os.Remove(backupPath)
+	}
+	
 	return nil
 }
 
@@ -47,21 +80,50 @@ func (ab *AppBlocker) killProcesses(appName string) error {
 }
 
 func (ab *AppBlocker) setupDBusMonitoring(appName string) error {
-	conn, err := dbus.SystemBus()
+	// Create executable wrapper that blocks the app
+	return ab.createBlockingWrapper(appName)
+}
+
+func (ab *AppBlocker) createBlockingWrapper(appName string) error {
+	// Find the actual executable path
+	execPath, err := exec.LookPath(appName)
 	if err != nil {
-		return err
+		// App not found in PATH, try common locations
+		commonPaths := []string{
+			"/usr/bin/" + appName,
+			"/usr/local/bin/" + appName,
+			"/snap/bin/" + appName,
+		}
+		for _, path := range commonPaths {
+			if _, err := os.Stat(path); err == nil {
+				execPath = path
+				break
+			}
+		}
+		if execPath == "" {
+			return fmt.Errorf("executable %s not found", appName)
+		}
 	}
-	defer conn.Close()
-
-	// Monitor systemd for new service starts
-	rule := fmt.Sprintf("type='signal',interface='org.freedesktop.systemd1.Manager',member='JobNew'")
-	call := conn.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, rule)
-	if call.Err != nil {
-		return call.Err
+	
+	// Backup original executable
+	backupPath := execPath + ".keyphy-backup"
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		if err := exec.Command("cp", execPath, backupPath).Run(); err != nil {
+			return fmt.Errorf("failed to backup executable: %v", err)
+		}
 	}
-
-	// In a real implementation, this would run in a goroutine
-	// and continuously monitor for new process launches
+	
+	// Create blocking script
+	blockScript := fmt.Sprintf(`#!/bin/bash
+echo "Access to %s is blocked by Keyphy"
+exit 1
+`, appName)
+	
+	// Replace executable with blocking script
+	if err := os.WriteFile(execPath, []byte(blockScript), 0755); err != nil {
+		return fmt.Errorf("failed to create blocking wrapper: %v", err)
+	}
+	
 	return nil
 }
 
