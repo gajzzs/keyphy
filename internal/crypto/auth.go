@@ -12,7 +12,7 @@ func GenerateDeviceKey(deviceUUID, deviceName string) string {
 	combined := fmt.Sprintf("%s:%s", deviceUUID, deviceName)
 	
 	// Use PBKDF2 for key derivation
-	salt := []byte("keyphy-salt-2024")
+	salt := []byte("keyphy-salt")
 	key := pbkdf2.Key([]byte(combined), salt, 10000, 32, sha256.New)
 	
 	return hex.EncodeToString(key)

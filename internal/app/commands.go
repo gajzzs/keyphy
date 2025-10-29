@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"keyphy/internal/config"
+	"keyphy/internal/crypto"
 	"keyphy/internal/device"
 	"keyphy/internal/service"
 )
@@ -80,6 +81,11 @@ func NewListCommand() *cobra.Command {
 			}
 			
 			fmt.Printf("\nAuth Device: %s\n", cfg.AuthDevice)
+			if cfg.AuthKey != "" {
+				fmt.Println("Auth Key: [CONFIGURED]")
+			} else {
+				fmt.Println("Auth Key: [NOT SET]")
+			}
 			fmt.Printf("Service Enabled: %t\n", cfg.ServiceEnabled)
 			
 			return nil
@@ -118,9 +124,21 @@ func NewDeviceCommand() *cobra.Command {
 			Short: "Select device for authentication",
 			Args:  cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				cfg := config.GetConfig()
-				cfg.AuthDevice = args[0]
-				return config.SaveConfig()
+				devices, err := device.ListUSBDevices()
+				if err != nil {
+					return err
+				}
+				
+				for _, dev := range devices {
+					if dev.UUID == args[0] {
+						cfg := config.GetConfig()
+						cfg.AuthDevice = dev.UUID
+						cfg.AuthKey = crypto.GenerateDeviceKey(dev.UUID, dev.Name)
+						fmt.Printf("Selected device: %s\n", dev.Name)
+						return config.SaveConfig()
+					}
+				}
+				return fmt.Errorf("device with UUID %s not found", args[0])
 			},
 		},
 	)
@@ -158,7 +176,16 @@ func NewServiceCommand() *cobra.Command {
 			Use:   "status",
 			Short: "Check daemon status",
 			RunE: func(cmd *cobra.Command, args []string) error {
-				fmt.Println("Daemon status: Not implemented")
+				running, err := service.GetDaemonStatus()
+				if err != nil {
+					return err
+				}
+				if running {
+					fmt.Println("Daemon status: Running")
+				} else {
+					fmt.Println("Daemon status: Stopped")
+				}
+				fmt.Printf("Service status: %s", service.GetServiceStatus())
 				return nil
 			},
 		},

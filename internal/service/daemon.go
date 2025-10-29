@@ -8,6 +8,7 @@ import (
 
 	"keyphy/internal/blocker"
 	"keyphy/internal/config"
+	"keyphy/internal/crypto"
 	"keyphy/internal/device"
 )
 
@@ -49,6 +50,11 @@ func (d *Daemon) Start() error {
 	go d.monitorNetwork()
 	go d.monitorProcesses()
 
+	// Create PID file
+	if err := CreatePidFile(); err != nil {
+		log.Printf("Warning: Could not create PID file: %v", err)
+	}
+
 	log.Println("Keyphy daemon started successfully")
 	return nil
 }
@@ -62,8 +68,26 @@ func (d *Daemon) Stop() error {
 	d.cancel()
 	d.running = false
 
+	// Remove PID file
+	RemovePidFile()
+
 	// Remove all blocks when stopping
 	return d.removeAllBlocks()
+}
+
+func (d *Daemon) validateDeviceAuth() bool {
+	cfg := config.GetConfig()
+	devices, err := device.ListUSBDevices()
+	if err != nil {
+		return false
+	}
+
+	for _, dev := range devices {
+		if dev.UUID == cfg.AuthDevice {
+			return crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
+		}
+	}
+	return false
 }
 
 func (d *Daemon) applyBlocks() error {
@@ -130,14 +154,14 @@ func (d *Daemon) monitorDevices() {
 			return
 		case <-ticker.C:
 			cfg := config.GetConfig()
-			if cfg.AuthDevice != "" {
-				if device.IsDeviceConnected(cfg.AuthDevice) {
-					// Device connected - remove blocks
-					log.Println("Auth device connected, removing blocks")
+			if cfg.AuthDevice != "" && cfg.AuthKey != "" {
+				if d.validateDeviceAuth() {
+					// Device authenticated - remove blocks
+					log.Println("Auth device authenticated, removing blocks")
 					d.removeAllBlocks()
 				} else {
-					// Device disconnected - apply blocks
-					log.Println("Auth device disconnected, applying blocks")
+					// Device not authenticated - apply blocks
+					log.Println("Auth device not authenticated, applying blocks")
 					d.applyBlocks()
 				}
 			}
