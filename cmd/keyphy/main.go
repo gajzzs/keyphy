@@ -16,6 +16,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.AddCommand(
 		app.NewBlockCommand(),
 		app.NewUnblockCommand(),
