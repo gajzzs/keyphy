@@ -1,4 +1,5 @@
-# Keyphy - System Access Control via External Device Authentication
+# Under Development
+## Keyphy - System Access Control via External Device Authentication
 
 Keyphy is a Linux CLI application that blocks access to applications, websites, and files/folders until authenticated with an external USB device. It uses the device's UUID and name to generate cryptographic keys for secure authentication.
 
