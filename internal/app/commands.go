@@ -234,7 +234,7 @@ func NewServiceCommand() *cobra.Command {
 			RunE: func(cmd *cobra.Command, args []string) error {
 				running, err := service.GetDaemonStatus()
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to get daemon status: %v", err)
 				}
 				if running {
 					fmt.Println("Daemon status: Running")
