@@ -19,34 +19,39 @@ type Device struct {
 func ListUSBDevices() ([]Device, error) {
 	var devices []Device
 
-	// Check all block devices for USB connections
-	blockDevs, err := filepath.Glob("/sys/block/sd*")
+	// Check all removable block devices
+	blockDevs, err := filepath.Glob("/sys/block/*")
 	if err != nil {
 		return devices, err
 	}
 
 	for _, blockDev := range blockDevs {
 		devName := filepath.Base(blockDev)
-		devPath := "/dev/" + devName
 		
-		if isUSBDevice(devPath) {
-			// Check partitions
-			partitions, _ := filepath.Glob(blockDev + "*")
-			for _, partition := range partitions {
-				partName := filepath.Base(partition)
-				partPath := "/dev/" + partName
-				
-				if partName != devName { // Skip the main device, only partitions
-					uuid := getDeviceUUID(partPath)
-					name := getDeviceName(devPath)
-					mountPoint := getMountPoint(partPath)
+		// Check if device is removable
+		removablePath := filepath.Join(blockDev, "removable")
+		if data, err := os.ReadFile(removablePath); err == nil {
+			if strings.TrimSpace(string(data)) == "1" {
+				// Check partitions
+				partitions, _ := filepath.Glob(blockDev + "*")
+				for _, partition := range partitions {
+					partName := filepath.Base(partition)
+					partPath := "/dev/" + partName
 					
-					devices = append(devices, Device{
-						UUID:       uuid,
-						Name:       name,
-						MountPoint: mountPoint,
-						DevPath:    partPath,
-					})
+					if partName != devName { // Skip the main device, only partitions
+						uuid := getDeviceUUID(partPath)
+						name := getDeviceName("/dev/" + devName)
+						mountPoint := getMountPoint(partPath)
+						
+						if uuid != "" { // Only add if UUID exists
+							devices = append(devices, Device{
+								UUID:       uuid,
+								Name:       name,
+								MountPoint: mountPoint,
+								DevPath:    partPath,
+							})
+						}
+					}
 				}
 			}
 		}
@@ -55,20 +60,14 @@ func ListUSBDevices() ([]Device, error) {
 	return devices, nil
 }
 
-func isUSBDevice(devPath string) bool {
-	// Check if device is connected via USB by examining sysfs
-	baseName := strings.TrimPrefix(filepath.Base(devPath), "sd")
-	baseName = strings.TrimSuffix(baseName, "1") // Remove partition number
-	baseName = "sd" + strings.TrimRight(baseName, "0123456789")
-	sysPath := fmt.Sprintf("/sys/block/%s", baseName)
-	
-	// Follow symlinks to find if it's USB
-	realPath, err := filepath.EvalSymlinks(sysPath)
+func isRemovableDevice(devName string) bool {
+	// Check if device is removable
+	removablePath := fmt.Sprintf("/sys/block/%s/removable", devName)
+	data, err := os.ReadFile(removablePath)
 	if err != nil {
 		return false
 	}
-	
-	return strings.Contains(realPath, "usb")
+	return strings.TrimSpace(string(data)) == "1"
 }
 
 func getDeviceUUID(devPath string) string {
@@ -83,13 +82,31 @@ func getDeviceUUID(devPath string) string {
 
 func getDeviceName(devPath string) string {
 	// Get device model from sysfs
-	baseName := strings.TrimPrefix(filepath.Base(devPath), "sd")
-	baseName = strings.TrimRight(baseName, "0123456789") // Remove partition numbers
-	baseName = "sd" + baseName
+	baseName := filepath.Base(devPath)
+	// Remove partition numbers to get base device name
+	baseName = strings.TrimRight(baseName, "0123456789")
 	modelPath := fmt.Sprintf("/sys/block/%s/device/model", baseName)
 	
 	if data, err := os.ReadFile(modelPath); err == nil {
 		return strings.TrimSpace(string(data))
+	}
+	
+	// Try vendor + product as fallback
+	vendorPath := fmt.Sprintf("/sys/block/%s/device/vendor", baseName)
+	productPath := fmt.Sprintf("/sys/block/%s/device/product", baseName)
+	
+	vendor := ""
+	product := ""
+	
+	if data, err := os.ReadFile(vendorPath); err == nil {
+		vendor = strings.TrimSpace(string(data))
+	}
+	if data, err := os.ReadFile(productPath); err == nil {
+		product = strings.TrimSpace(string(data))
+	}
+	
+	if vendor != "" && product != "" {
+		return vendor + " " + product
 	}
 	
 	return baseName
