@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"keyphy/internal/blocker"
@@ -49,6 +52,7 @@ func (d *Daemon) Start() error {
 	go d.monitorDevices()
 	go d.monitorNetwork()
 	go d.monitorProcesses()
+	go d.handleSignals()
 
 	// Create PID file
 	if err := CreatePidFile(); err != nil {
@@ -234,6 +238,37 @@ func (d *Daemon) monitorProcesses() {
 							log.Printf("Failed to block process %d: %v", pid, err)
 						}
 					}
+				}
+			}
+		}
+	}
+}
+
+func (d *Daemon) handleSignals() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2)
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case sig := <-sigChan:
+			switch sig {
+			case syscall.SIGUSR1:
+				log.Println("Received unlock signal")
+				if d.validateDeviceAuth() {
+					log.Println("Device authenticated, removing blocks")
+					d.removeAllBlocks()
+				} else {
+					log.Println("Device authentication failed")
+				}
+			case syscall.SIGUSR2:
+				log.Println("Received lock signal")
+				if d.validateDeviceAuth() {
+					log.Println("Device authenticated, applying blocks")
+					d.applyBlocks()
+				} else {
+					log.Println("Device authentication failed")
 				}
 			}
 		}

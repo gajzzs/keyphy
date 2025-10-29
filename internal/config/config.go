@@ -12,7 +12,6 @@ type Config struct {
 	BlockedPaths    []string `json:"blocked_paths"`
 	AuthDevice      string   `json:"auth_device"`
 	AuthKey         string   `json:"auth_key"`
-	ServiceEnabled  bool     `json:"service_enabled"`
 }
 
 var (
@@ -30,7 +29,6 @@ func InitConfig() error {
 		BlockedApps:     []string{},
 		BlockedWebsites: []string{},
 		BlockedPaths:    []string{},
-		ServiceEnabled:  false,
 	}
 
 	if _, err := os.Stat(ConfigFile); err == nil {
