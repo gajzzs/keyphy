@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -36,11 +37,19 @@ func InitConfig() error {
 	}
 
 	if _, err := os.Stat(ConfigFile); err == nil {
+		// Temporarily remove protection to read
+		UnprotectConfigFile()
 		data, err := os.ReadFile(ConfigFile)
 		if err != nil {
 			return err
 		}
-		return json.Unmarshal(data, config)
+		if err := json.Unmarshal(data, config); err != nil {
+			fmt.Println("Warning: Config file corrupted, creating new one")
+			return SaveConfig()
+		}
+		// Restore protection
+		ProtectConfigFile()
+		return nil
 	} else {
 		fmt.Println("Creating keyphy configuration file...")
 	}
@@ -57,36 +66,53 @@ func SaveConfig() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(ConfigFile, data, 0644); err != nil {
+	// Use more restrictive permissions (root only)
+	if err := os.WriteFile(ConfigFile, data, 0600); err != nil {
 		return err
 	}
+	// Make file immutable to prevent tampering
+	ProtectConfigFile()
 	fmt.Println("Configuration saved successfully")
 	return nil
 }
 
 func AddBlockedApp(app string) error {
+	UnprotectConfigFile()
 	config.BlockedApps = append(config.BlockedApps, app)
 	fmt.Printf("Added '%s' to blocked applications in config\n", app)
 	return SaveConfig()
 }
 
 func AddBlockedWebsite(website string) error {
+	UnprotectConfigFile()
 	config.BlockedWebsites = append(config.BlockedWebsites, website)
 	fmt.Printf("Added '%s' to blocked websites in config\n", website)
 	return SaveConfig()
 }
 
 func AddBlockedPath(path string) error {
+	UnprotectConfigFile()
 	config.BlockedPaths = append(config.BlockedPaths, path)
 	fmt.Printf("Added '%s' to blocked paths in config\n", path)
 	return SaveConfig()
 }
 
 func RemoveBlocked(item string) error {
+	UnprotectConfigFile()
 	config.BlockedApps = removeFromSlice(config.BlockedApps, item)
 	config.BlockedWebsites = removeFromSlice(config.BlockedWebsites, item)
 	config.BlockedPaths = removeFromSlice(config.BlockedPaths, item)
 	return SaveConfig()
+}
+
+func ProtectConfigFile() {
+	// Make config file immutable to prevent tampering
+	exec.Command("chattr", "+i", ConfigFile).Run()
+}
+
+func UnprotectConfigFile() {
+	// Remove immutable flag from config file
+	exec.Command("chattr", "-i", ConfigFile).Run()
 }
 
 func removeFromSlice(slice []string, item string) []string {
