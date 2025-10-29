@@ -19,24 +19,38 @@ func NewBlockCommand() *cobra.Command {
 		DisableFlagsInUseLine: true,
 	}
 
-	cmd.AddCommand(
-		&cobra.Command{
-			Use:   "app [application-name]",
-			Short: "Block an application",
-			Args:  cobra.ExactArgs(1),
-			DisableFlagsInUseLine: true,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				if !validateDeviceAuth() {
-					return fmt.Errorf("authentication device not connected or invalid")
-				}
-				fmt.Printf("Blocking application: %s\n", args[0])
-				if err := config.AddBlockedApp(args[0]); err != nil {
+	appCmd := &cobra.Command{
+		Use:   "app [application-name]",
+		Short: "Block an application (use executable name, e.g. firefox, chrome, code)",
+		Args:  cobra.ExactArgs(1),
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !validateDeviceAuth() {
+				return fmt.Errorf("authentication device not connected or invalid")
+			}
+			
+			customPath, _ := cmd.Flags().GetString("path")
+			appName := args[0]
+			
+			fmt.Printf("Blocking application: %s\n", appName)
+			if customPath != "" {
+				fmt.Printf("Using custom path: %s\n", customPath)
+				if err := config.AddBlockedAppWithPath(appName, customPath); err != nil {
 					return err
 				}
-				fmt.Printf("Application '%s' blocked successfully\n", args[0])
-				return nil
-			},
+			} else {
+				if err := config.AddBlockedApp(appName); err != nil {
+					return err
+				}
+			}
+			fmt.Printf("Application '%s' blocked successfully\n", appName)
+			return nil
 		},
+	}
+	appCmd.Flags().String("path", "", "Custom path to executable (e.g. /opt/app/bin/myapp)")
+
+	cmd.AddCommand(
+		appCmd,
 		&cobra.Command{
 			Use:   "website [domain]",
 			Short: "Block a website (enter domain without www, e.g. youtube.com)",

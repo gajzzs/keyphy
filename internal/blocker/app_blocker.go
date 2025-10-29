@@ -84,23 +84,36 @@ func (ab *AppBlocker) setupDBusMonitoring(appName string) error {
 }
 
 func (ab *AppBlocker) createBlockingWrapper(appName string) error {
-	// Find the actual executable path
-	execPath, err := exec.LookPath(appName)
-	if err != nil {
-		// App not found in PATH, try common locations
-		commonPaths := []string{
-			"/usr/bin/" + appName,
-			"/usr/local/bin/" + appName,
-			"/snap/bin/" + appName,
+	var execPath string
+	
+	// Check if appName contains custom path (format: "name:path")
+	if strings.Contains(appName, ":") {
+		parts := strings.SplitN(appName, ":", 2)
+		appName = parts[0]
+		execPath = parts[1]
+		if _, err := os.Stat(execPath); err != nil {
+			return fmt.Errorf("custom executable path %s not found", execPath)
 		}
-		for _, path := range commonPaths {
-			if _, err := os.Stat(path); err == nil {
-				execPath = path
-				break
+	} else {
+		// Find the actual executable path
+		var err error
+		execPath, err = exec.LookPath(appName)
+		if err != nil {
+			// App not found in PATH, try common locations
+			commonPaths := []string{
+				"/usr/bin/" + appName,
+				"/usr/local/bin/" + appName,
+				"/snap/bin/" + appName,
 			}
-		}
-		if execPath == "" {
-			return fmt.Errorf("executable %s not found", appName)
+			for _, path := range commonPaths {
+				if _, err := os.Stat(path); err == nil {
+					execPath = path
+					break
+				}
+			}
+			if execPath == "" {
+				return fmt.Errorf("executable %s not found", appName)
+			}
 		}
 	}
 	
