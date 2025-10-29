@@ -139,6 +139,13 @@ func NewListCommand() *cobra.Command {
 			}
 			
 			fmt.Printf("\nAuth Device: %s\n", cfg.AuthDevice)
+			if cfg.AuthDeviceName != "" {
+				fmt.Printf("Auth Device Name: %s\n", cfg.AuthDeviceName)
+			}
+			if cfg.AuthMountState != "" {
+				fmt.Printf("Required Mount State: %s\n", cfg.AuthMountState)
+			}
+			fmt.Printf("State Enforcement: %t\n", cfg.EnforceState)
 			if cfg.AuthKey != "" {
 				fmt.Println("Auth Key: [CONFIGURED]")
 			} else {
@@ -167,53 +174,84 @@ func NewDeviceCommand() *cobra.Command {
 		DisableFlagsInUseLine: true,
 	}
 
-	cmd.AddCommand(
-		&cobra.Command{
-			Use:   "list",
-			Short: "List available USB devices",
-			DisableFlagsInUseLine: true,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				devices, err := device.ListUSBDevices()
-				if err != nil {
-					return err
-				}
-				
-				fmt.Println("Available USB Devices:")
-				for i, dev := range devices {
-					fmt.Printf("%d. %s (UUID: %s)\n", i+1, dev.Name, dev.UUID)
-					fmt.Printf("   Path: %s\n", dev.DevPath)
-					fmt.Printf("   Mount: %s\n\n", dev.MountPoint)
-				}
-				
-				return nil
-			},
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List available USB devices",
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			devices, err := device.ListUSBDevices()
+			if err != nil {
+				return err
+			}
+			
+			fmt.Println("Available USB Devices:")
+			for i, dev := range devices {
+				fmt.Printf("%d. %s (UUID: %s)\n", i+1, dev.Name, dev.UUID)
+				fmt.Printf("   Path: %s\n", dev.DevPath)
+				fmt.Printf("   Mount: %s\n\n", dev.MountPoint)
+			}
+			
+			return nil
 		},
-		&cobra.Command{
-			Use:   "select [device-uuid]",
-			Short: "Select device for authentication",
-			Args:  cobra.ExactArgs(1),
-			DisableFlagsInUseLine: true,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				fmt.Println("Scanning for USB devices...")
-				devices, err := device.ListUSBDevices()
-				if err != nil {
-					return err
-				}
-				
-				for _, dev := range devices {
-					if dev.UUID == args[0] {
-						fmt.Printf("Found device: %s (UUID: %s)\n", dev.Name, dev.UUID)
-						fmt.Println("Generating authentication key...")
-						cfg := config.GetConfig()
-						cfg.AuthDevice = dev.UUID
-						cfg.AuthKey = crypto.GenerateDeviceKey(dev.UUID, dev.Name)
-						fmt.Printf("Device '%s' selected as authentication device\n", dev.Name)
-						return config.SaveConfig()
+	}
+	
+	selectCmd := &cobra.Command{
+		Use:   "select [device-uuid]",
+		Short: "Select device for authentication",
+		Args:  cobra.ExactArgs(1),
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("Scanning for USB devices...")
+			devices, err := device.ListUSBDevices()
+			if err != nil {
+				return err
+			}
+			
+			enforceState, _ := cmd.Flags().GetBool("save-state")
+			
+			for _, dev := range devices {
+				if dev.UUID == args[0] {
+					fmt.Printf("Found device: %s (UUID: %s)\n", dev.Name, dev.UUID)
+					
+					// Determine mount state
+					mountState := "unmounted"
+					if dev.MountPoint != "(not mounted)" {
+						if strings.Contains(dev.MountPoint, "encrypted") {
+							mountState = "mounted-encrypted"
+						} else {
+							mountState = "mounted"
+						}
 					}
+					
+					fmt.Printf("Current state: %s, UUID: %s, Name: %s\n", mountState, dev.UUID, dev.Name)
+					
+					if enforceState {
+						fmt.Printf("State enforcement enabled - device must be %s for authentication\n", mountState)
+					} else {
+						fmt.Println("State enforcement disabled - device works in any mount state")
+					}
+					
+					fmt.Println("Generating authentication key...")
+					cfg := config.GetConfig()
+					cfg.AuthDevice = dev.UUID
+					cfg.AuthDeviceName = dev.Name
+					cfg.AuthMountState = mountState
+					cfg.EnforceState = enforceState
+					cfg.AuthKey = crypto.GenerateDeviceKey(dev.UUID, dev.Name)
+					
+					fmt.Printf("Device '%s' selected as authentication device\n", dev.Name)
+					return config.SaveConfig()
 				}
-				return fmt.Errorf("device with UUID %s not found", args[0])
-			},
+			}
+			return fmt.Errorf("device with UUID %s not found", args[0])
 		},
+	}
+	
+	selectCmd.Flags().Bool("save-state", false, "Enforce exact mount state for authentication")
+	
+	cmd.AddCommand(
+		listCmd,
+		selectCmd,
 	)
 
 	return cmd
@@ -341,6 +379,29 @@ func validateDeviceAuth() bool {
 	for _, dev := range devices {
 		if dev.UUID == cfg.AuthDevice {
 			fmt.Printf("Found authentication device: %s\n", dev.Name)
+			
+			// Check mount state if enforcement is enabled
+			if cfg.EnforceState {
+				currentState := "unmounted"
+				if dev.MountPoint != "(not mounted)" {
+					if strings.Contains(dev.MountPoint, "encrypted") {
+						currentState = "mounted-encrypted"
+					} else {
+						currentState = "mounted"
+					}
+				}
+				
+				fmt.Printf("Required state: %s, Current state: %s\n", cfg.AuthMountState, currentState)
+				
+				if currentState != cfg.AuthMountState {
+					fmt.Printf("Device state mismatch! Expected '%s' but found '%s'\n", cfg.AuthMountState, currentState)
+					return false
+				}
+				fmt.Println("Device state matches required state")
+			} else {
+				fmt.Println("State enforcement disabled - accepting any mount state")
+			}
+			
 			fmt.Println("Validating device authentication...")
 			valid, err := crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
 			if err != nil {
