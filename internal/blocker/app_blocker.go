@@ -7,7 +7,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/godbus/dbus/v5"
 )
 
 type AppBlocker struct {
