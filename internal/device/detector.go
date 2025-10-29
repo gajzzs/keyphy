@@ -34,12 +34,11 @@ func ListUSBDevices() ([]Device, error) {
 			removableFlag := strings.TrimSpace(string(data))
 			fmt.Printf("DEBUG: Device %s removable=%s\n", devName, removableFlag)
 			if removableFlag == "1" {
-				// Check partitions
-				partitions, _ := filepath.Glob(blockDev + "*")
+				// Check partitions in /dev/
+				partitions, _ := filepath.Glob("/dev/" + devName + "*")
 				fmt.Printf("DEBUG: Found %d partitions for %s\n", len(partitions), devName)
-				for _, partition := range partitions {
-					partName := filepath.Base(partition)
-					partPath := "/dev/" + partName
+				for _, partPath := range partitions {
+					partName := filepath.Base(partPath)
 					fmt.Printf("DEBUG: Checking partition %s\n", partName)
 					
 					if partName != devName { // Skip the main device, only partitions
