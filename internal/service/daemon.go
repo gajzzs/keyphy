@@ -297,7 +297,7 @@ func (d *Daemon) monitorProcesses() {
 
 func (d *Daemon) handleSignals() {
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
+	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGTERM, syscall.SIGINT)
 
 	for {
 		select {
@@ -323,7 +323,7 @@ func (d *Daemon) handleSignals() {
 					log.Println("Blocks applied successfully")
 					d.blocksActive = true
 				}
-			case syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL:
+			case syscall.SIGTERM, syscall.SIGINT:
 				// Require auth device for termination
 				if !d.validateDeviceAuth() {
 					log.Println("Termination attempt blocked - auth device required")
