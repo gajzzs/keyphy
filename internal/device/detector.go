@@ -97,15 +97,7 @@ func ListUSBDevices() ([]Device, error) {
 	return devices, nil
 }
 
-func isRemovableDevice(devName string) bool {
-	// Check if device is removable
-	removablePath := fmt.Sprintf("/sys/block/%s/removable", devName)
-	data, err := os.ReadFile(removablePath)
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(data)) == "1"
-}
+
 
 func getDeviceUUID(devPath string) string {
 	// Try UUID first with sudo
