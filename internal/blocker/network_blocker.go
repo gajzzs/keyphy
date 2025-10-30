@@ -102,15 +102,7 @@ func (nb *NetworkBlocker) blockDNS(domain string) error {
 	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 	cmd.Run()
 	
-	// Block direct IP access to YouTube (Google IP ranges) - only once
-	if (strings.Contains(domain, "youtube") || strings.Contains(domain, "google")) && !nb.ipBlocksAdded {
-		youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
-		for _, ip := range youtubeIPs {
-			cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", ip, "-j", "DROP")
-			cmd.Run() // Ignore errors
-		}
-		nb.ipBlocksAdded = true
-	}
+
 	
 	// Block DNS-over-HTTPS servers - only once
 	if !nb.dohBlocksAdded {
@@ -147,14 +139,7 @@ func (nb *NetworkBlocker) unblockDNS(domain string) error {
 	cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 	cmd.Run()
 	
-	// Remove IP blocks for YouTube
-	if strings.Contains(domain, "youtube") || strings.Contains(domain, "google") {
-		youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
-		for _, ip := range youtubeIPs {
-			cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP")
-			cmd.Run()
-		}
-	}
+
 	
 	return nil
 }
@@ -250,8 +235,23 @@ func (nb *NetworkBlocker) shouldBlockConnection(connection string) bool {
 }
 
 func (nb *NetworkBlocker) blockConnection(connection string) error {
-	// Extract connection details and block using iptables
-	// This is a simplified implementation
+	// Parse connection string to extract IP and port
+	fields := strings.Fields(connection)
+	if len(fields) < 5 {
+		return nil // Invalid connection format
+	}
+	
+	// Extract destination IP from connection
+	destAddr := fields[4]
+	if strings.Contains(destAddr, ":") {
+		parts := strings.Split(destAddr, ":")
+		if len(parts) >= 1 {
+			ip := parts[0]
+			// Block this specific IP
+			cmd := exec.Command("iptables", "-I", "OUTPUT", "1", "-d", ip, "-j", "DROP")
+			cmd.Run()
+		}
+	}
 	return nil
 }
 
@@ -355,16 +355,6 @@ func (nb *NetworkBlocker) UnblockAll() error {
 }
 
 func (nb *NetworkBlocker) removeAllIptablesRules() {
-	// Remove all Google IP blocks
-	youtubeIPs := []string{"142.250.0.0/15", "172.217.0.0/16", "216.58.192.0/19", "74.125.0.0/16"}
-	for _, ip := range youtubeIPs {
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP")
-			if cmd.Run() != nil {
-				break // No more rules to delete
-			}
-		}
-	}
 	
 	// Remove all DoH server blocks
 	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
@@ -377,9 +367,8 @@ func (nb *NetworkBlocker) removeAllIptablesRules() {
 		}
 	}
 	
-	// Remove all string matching rules (DNS, HTTP, HTTPS)
-	domains := []string{"youtube.com", "www.youtube.com"}
-	for _, domain := range domains {
+	// Remove all string matching rules for blocked domains
+	for domain := range nb.blockedDomains {
 		// Remove DNS rules
 		for {
 			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
