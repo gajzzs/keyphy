@@ -93,27 +93,12 @@ func NewAddCommand() *cobra.Command {
 func NewUnblockCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "unblock [item]",
-		Short: "Remove blocking rule for app, website, or path (use 'all' to remove everything)",
+		Short: "Remove blocking rule for app, website, or path",
 		Args:  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !validateDeviceAuth() {
 				return fmt.Errorf("authentication device not connected or invalid")
-			}
-			if args[0] == "all" {
-				fmt.Println("Removing all blocking rules...")
-				// Remove active iptables rules
-				networkBlocker := blocker.NewNetworkBlocker()
-				if err := networkBlocker.UnblockAll(); err != nil {
-					fmt.Printf("Warning: Failed to remove iptables rules: %v\n", err)
-				}
-				// Clear config
-				cfg := config.GetConfig()
-				cfg.BlockedApps = []string{}
-				cfg.BlockedWebsites = []string{}
-				cfg.BlockedPaths = []string{}
-				fmt.Println("All blocking rules removed successfully")
-				return config.SaveConfig()
 			}
 			// Remove specific item from active rules and config
 			fmt.Printf("Unblocking: %s\n", args[0])
@@ -125,6 +110,62 @@ func NewUnblockCommand() *cobra.Command {
 				return err
 			}
 			fmt.Printf("'%s' unblocked successfully\n", args[0])
+			return nil
+		},
+	}
+}
+
+func NewResetCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset",
+		Short: "Reset keyphy - remove all blocks, restore system, and stop service",
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !validateDeviceAuth() {
+				return fmt.Errorf("authentication device not connected or invalid")
+			}
+			
+			fmt.Println("Resetting keyphy system...")
+			
+			// Stop daemon first
+			fmt.Println("Stopping daemon...")
+			if err := service.SendStopSignal(); err != nil {
+				fmt.Printf("Warning: Failed to stop daemon: %v\n", err)
+			}
+			
+			// Remove all blocking rules
+			fmt.Println("Removing all blocking rules...")
+			networkBlocker := blocker.NewNetworkBlocker()
+			if err := networkBlocker.UnblockAll(); err != nil {
+				fmt.Printf("Warning: Failed to remove network rules: %v\n", err)
+			}
+			
+			// Restore all app executables
+			appBlocker := blocker.NewAppBlocker()
+			cfg := config.GetConfig()
+			for _, app := range cfg.BlockedApps {
+				if err := appBlocker.UnblockApp(app); err != nil {
+					fmt.Printf("Warning: Failed to restore %s: %v\n", app, err)
+				}
+			}
+			
+			// Restore file permissions
+			fileBlocker := blocker.NewFileBlocker()
+			for _, path := range cfg.BlockedPaths {
+				if err := fileBlocker.UnblockPath(path); err != nil {
+					fmt.Printf("Warning: Failed to restore %s: %v\n", path, err)
+				}
+			}
+			
+			// Clear config
+			cfg.BlockedApps = []string{}
+			cfg.BlockedWebsites = []string{}
+			cfg.BlockedPaths = []string{}
+			if err := config.SaveConfig(); err != nil {
+				fmt.Printf("Warning: Failed to clear config: %v\n", err)
+			}
+			
+			fmt.Println("Keyphy system reset complete - all blocks removed and service stopped")
 			return nil
 		},
 	}
