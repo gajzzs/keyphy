@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"os"
 	"github.com/spf13/cobra"
-	"keyphy/internal/app"
-	"keyphy/internal/config"
+	"github.com/gajzzs/keyphy/internal/app"
+	"github.com/gajzzs/keyphy/internal/config"
 )
 
+var version = "dev"
+
 var rootCmd = &cobra.Command{
-	Use:   "keyphy",
-	Short: "System access control using external device authentication",
-	Long:  "Keyphy blocks apps, websites, and file access until authenticated with external USB device",
+	Use:     "keyphy",
+	Short:   "System access control using external device authentication",
+	Long:    "Keyphy blocks apps, websites, and file access until authenticated with external USB device",
+	Version: version,
 }
 
 func init() {

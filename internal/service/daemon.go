@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 	"os/exec"
-	"keyphy/internal/blocker"
-	"keyphy/internal/config"
-	"keyphy/internal/crypto"
-	"keyphy/internal/device"
+	"github.com/gajzzs/keyphy/internal/blocker"
+	"github.com/gajzzs/keyphy/internal/config"
+	"github.com/gajzzs/keyphy/internal/crypto"
+	"github.com/gajzzs/keyphy/internal/device"
 )
 
 type Daemon struct {

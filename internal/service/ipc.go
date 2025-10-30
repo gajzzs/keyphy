@@ -7,9 +7,9 @@ import (
 	"strings"
 	"syscall"
 
-	"keyphy/internal/config"
-	"keyphy/internal/crypto"
-	"keyphy/internal/device"
+	"github.com/gajzzs/keyphy/internal/config"
+	"github.com/gajzzs/keyphy/internal/crypto"
+	"github.com/gajzzs/keyphy/internal/device"
 )
 
 const (
