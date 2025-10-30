@@ -23,6 +23,11 @@ func ValidateDeviceAuth(deviceUUID, deviceName, expectedKey string) (bool, error
 		return false, fmt.Errorf("device UUID, name, and expected key cannot be empty")
 	}
 	
+	// Validate that expectedKey is valid hex
+	if _, err := hex.DecodeString(expectedKey); err != nil {
+		return false, fmt.Errorf("invalid expected key format: %v", err)
+	}
+	
 	generatedKey := GenerateDeviceKey(deviceUUID, deviceName)
 	return generatedKey == expectedKey, nil
 }

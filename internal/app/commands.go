@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"os/exec"
 	"github.com/spf13/cobra"
 	"github.com/manifoldco/promptui"
 	"github.com/gajzzs/keyphy/internal/blocker"
@@ -480,6 +481,21 @@ func NewServiceCommand() *cobra.Command {
 				return nil
 			},
 		},
+		&cobra.Command{
+			Use:   "watchdog",
+			Short: "Start service watchdog to auto-restart if killed",
+			DisableFlagsInUseLine: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if os.Geteuid() != 0 {
+					return execWithSudo("service", "watchdog")
+				}
+				sm, err := service.NewServiceManager()
+				if err != nil {
+					return err
+				}
+				return sm.Watchdog()
+			},
+		},
 	)
 
 	return cmd
@@ -492,7 +508,7 @@ func NewLockCommand() *cobra.Command {
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if os.Geteuid() != 0 {
-				return fmt.Errorf("lock requires root privileges")
+				return execWithSudo("lock")
 			}
 			fmt.Println("Sending lock signal to daemon...")
 			if err := service.SendLockSignal(); err != nil {
@@ -511,7 +527,7 @@ func NewUnlockCommand() *cobra.Command {
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if os.Geteuid() != 0 {
-				return fmt.Errorf("unlock requires root privileges")
+				return execWithSudo("unlock")
 			}
 			fmt.Println("Sending unlock signal to daemon...")
 			if err := service.SendUnlockSignal(); err != nil {
@@ -521,6 +537,21 @@ func NewUnlockCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func execWithSudo(args ...string) error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %v", err)
+	}
+	
+	cmdArgs := append([]string{execPath}, args...)
+	cmd := exec.Command("sudo", cmdArgs...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	return cmd.Run()
 }
 
 func validateDeviceAuth() bool {

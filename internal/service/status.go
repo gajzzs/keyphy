@@ -60,7 +60,7 @@ func CreatePidFile() error {
 		return fmt.Errorf("failed to create /var/run directory: %v", err)
 	}
 	
-	if err := os.WriteFile(pidFile, []byte(data), 0644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(data), 0600); err != nil {
 		return fmt.Errorf("failed to write PID file: %v", err)
 	}
 	
