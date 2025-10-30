@@ -37,22 +37,34 @@ func (ab *AppBlocker) UnblockApp(appName string) error {
 }
 
 func (ab *AppBlocker) restoreOriginalExecutable(appName string) error {
-	// Find the executable path
-	execPath, err := exec.LookPath(appName)
-	if err != nil {
-		commonPaths := []string{
-			"/usr/bin/" + appName,
-			"/usr/local/bin/" + appName,
-			"/snap/bin/" + appName,
-		}
-		for _, path := range commonPaths {
-			if _, err := os.Stat(path + ".keyphy-backup"); err == nil {
-				execPath = path
-				break
+	var execPath string
+	
+	// Handle custom path format (name:path) or full path
+	if strings.Contains(appName, ":") {
+		parts := strings.SplitN(appName, ":", 2)
+		execPath = parts[1]
+	} else if strings.HasPrefix(appName, "/") {
+		// Full path provided directly
+		execPath = appName
+	} else {
+		// Find the executable path
+		var err error
+		execPath, err = exec.LookPath(appName)
+		if err != nil {
+			commonPaths := []string{
+				"/usr/bin/" + appName,
+				"/usr/local/bin/" + appName,
+				"/snap/bin/" + appName,
 			}
-		}
-		if execPath == "" {
-			return nil // No backup found, nothing to restore
+			for _, path := range commonPaths {
+				if _, err := os.Stat(path + ".keyphy-backup"); err == nil {
+					execPath = path
+					break
+				}
+			}
+			if execPath == "" {
+				return nil // No backup found, nothing to restore
+			}
 		}
 	}
 	
