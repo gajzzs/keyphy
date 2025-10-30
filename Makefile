@@ -20,10 +20,17 @@ install: build
 	@echo "Installation complete. Run 'keyphy --help' to get started."
 
 service:
-	@echo "Installing systemd service..."
+ifeq ($(shell uname),Darwin)
+	@echo "Installing macOS launchd service..."
+	@sudo cp com.keyphy.daemon.plist /Library/LaunchDaemons/
+	@sudo launchctl bootstrap system /Library/LaunchDaemons/com.keyphy.daemon.plist
+	@echo "macOS service installed"
+else
+	@echo "Installing Linux systemd service..."
 	@sudo cp keyphy.service $(SERVICE_DIR)/
 	@sudo systemctl daemon-reload
 	@echo "Service installed. Use 'sudo systemctl enable keyphy' to enable on boot."
+endif
 
 uninstall:
 	@echo "Uninstalling keyphy..."
