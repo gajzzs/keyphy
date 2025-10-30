@@ -52,7 +52,7 @@ func GetServiceStatus() string {
 }
 
 func CreatePidFile() error {
-	pidFile := "/var/run/keyphy.pid"
+	pidFile := getUniquePidFile()
 	pid := os.Getpid()
 	data := fmt.Sprintf("%d\n", pid)
 	
@@ -68,8 +68,27 @@ func CreatePidFile() error {
 	return nil
 }
 
+func getUniquePidFile() string {
+	basePid := "/var/run/keyphy.pid"
+	if _, err := os.Stat(basePid); os.IsNotExist(err) {
+		return basePid
+	}
+	
+	// Check if it's a directory
+	if info, err := os.Stat(basePid); err == nil && info.IsDir() {
+		// Directory exists, create unique PID file name
+		for i := 1; i < 100; i++ {
+			uniqueName := fmt.Sprintf("/var/run/keyphy_%d.pid", i)
+			if _, err := os.Stat(uniqueName); os.IsNotExist(err) {
+				return uniqueName
+			}
+		}
+	}
+	return basePid
+}
+
 func RemovePidFile() error {
-	pidFile := "/var/run/keyphy.pid"
+	pidFile := getUniquePidFile()
 	if _, err := os.Stat(pidFile); os.IsNotExist(err) {
 		return nil // File doesn't exist, nothing to remove
 	}

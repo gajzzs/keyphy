@@ -20,10 +20,29 @@ type Config struct {
 }
 
 var (
-	ConfigDir  = "/etc/keyphy"
+	ConfigDir  = getUniqueConfigDir()
 	ConfigFile = filepath.Join(ConfigDir, "config.json")
 	config     *Config
 )
+
+func getUniqueConfigDir() string {
+	baseDir := "/etc/keyphy"
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		return baseDir
+	}
+	
+	// Check if it's a file, not directory
+	if info, err := os.Stat(baseDir); err == nil && !info.IsDir() {
+		// File exists, create unique directory name
+		for i := 1; i < 100; i++ {
+			uniqueName := fmt.Sprintf("%s_%d", baseDir, i)
+			if _, err := os.Stat(uniqueName); os.IsNotExist(err) {
+				return uniqueName
+			}
+		}
+	}
+	return baseDir
+}
 
 func InitConfig() error {
 	if err := os.MkdirAll(ConfigDir, 0755); err != nil {
