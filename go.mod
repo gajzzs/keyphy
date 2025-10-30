@@ -9,7 +9,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/spf13/cobra v1.8.0
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/crypto v0.17.0
+	golang.org/x/crypto v0.38.0
 )
 
 require (
