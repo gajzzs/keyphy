@@ -2,13 +2,15 @@ BINARY_NAME=keyphy
 BUILD_DIR=build
 INSTALL_DIR=/usr/local/bin
 SERVICE_DIR=/etc/systemd/system
+VERSION=$(shell git describe --tags --always --dirty)
+LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION)"
 
-.PHONY: build install uninstall clean service test deps
+.PHONY: build install uninstall clean service test deps release
 
 build:
 	@echo "Building keyphy..."
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/keyphy
+	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/keyphy
 
 install: build
 	@echo "Installing keyphy..."
@@ -43,4 +45,11 @@ test:
 deps:
 	@echo "Installing dependencies..."
 	@go mod tidy
-	@go mod download%
+	@go mod download
+
+release:
+	@echo "Building release binaries..."
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/keyphy
+	@GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/keyphy
+	@echo "Release binaries built in $(BUILD_DIR)/"

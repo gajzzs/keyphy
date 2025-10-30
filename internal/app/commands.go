@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 	"github.com/spf13/cobra"
-	"keyphy/internal/blocker"
-	"keyphy/internal/config"
-	"keyphy/internal/crypto"
-	"keyphy/internal/device"
-	"keyphy/internal/service"
+	"github.com/gajzzs/keyphy/internal/blocker"
+	"github.com/gajzzs/keyphy/internal/config"
+	"github.com/gajzzs/keyphy/internal/crypto"
+	"github.com/gajzzs/keyphy/internal/device"
+	"github.com/gajzzs/keyphy/internal/service"
 )
 
 func NewAddCommand() *cobra.Command {

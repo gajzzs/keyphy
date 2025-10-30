@@ -1,6 +1,8 @@
-### ⚠ Under Development
+# Keyphy - System Access Control via External Device Authentication
 
-## Keyphy - System Access Control via External Device Authentication
+[![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/gajzzs/keyphy)](https://github.com/gajzzs/keyphy/releases)
 
 Keyphy is a Linux CLI application that blocks access to applications, websites, and files/folders until authenticated with an external USB device. It uses the device's UUID and name to generate cryptographic keys for secure authentication.
 
@@ -39,6 +41,24 @@ Use "keyphy [command] --help" for more information about a command.
 
 
 ## Installation
+
+### Option 1: Install from Release (Recommended)
+
+```bash
+# Download latest release
+wget https://github.com/gajzzs/keyphy/releases/latest/download/keyphy-linux-amd64.tar.gz
+tar -xzf keyphy-linux-amd64.tar.gz
+sudo cp keyphy /usr/local/bin/
+sudo chmod +x /usr/local/bin/keyphy
+```
+
+### Option 2: Install with Go
+
+```bash
+go install github.com/gajzzs/keyphy/cmd/keyphy@latest
+```
+
+### Option 3: Build from Source
 
 ```bash
 # Clone the repository
@@ -80,9 +100,23 @@ go build -o keyphy ./cmd/keyphy
 make build
 ```
 
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
+
+## Security
+
+For security-related issues, please see our [Security Policy](SECURITY.md).
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- 📖 [Documentation](https://github.com/gajzzs/keyphy/wiki)
+- 🐛 [Issue Tracker](https://github.com/gajzzs/keyphy/issues)
+- 💬 [Discussions](https://github.com/gajzzs/keyphy/discussions)
 
 ## Warning
 
