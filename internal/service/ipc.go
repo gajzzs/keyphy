@@ -31,7 +31,7 @@ func SendUnlockSignal() error {
 	// Check if process is actually running
 	if !isProcessRunning(pid) {
 		// Clean up stale PID file
-		os.Remove("/var/run/keyphy.pid")
+		os.Remove(getUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
@@ -57,7 +57,7 @@ func SendLockSignal() error {
 	// Check if process is actually running
 	if !isProcessRunning(pid) {
 		// Clean up stale PID file
-		os.Remove("/var/run/keyphy.pid")
+		os.Remove(getUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
@@ -112,7 +112,7 @@ func SendStopSignal() error {
 	// Check if process is actually running
 	if !isProcessRunning(pid) {
 		// Clean up stale PID file
-		os.Remove("/var/run/keyphy.pid")
+		os.Remove(getUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
@@ -126,7 +126,7 @@ func SendStopSignal() error {
 }
 
 func readPidFile() (int, error) {
-	pidFile := "/var/run/keyphy.pid"
+	pidFile := getUniquePidFile()
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		return 0, err
@@ -138,4 +138,23 @@ func readPidFile() (int, error) {
 	}
 	
 	return pid, nil
+}
+
+func getUniquePidFile() string {
+	basePid := "/var/run/keyphy.pid"
+	if _, err := os.Stat(basePid); os.IsNotExist(err) {
+		return basePid
+	}
+	
+	// Check if it's a directory
+	if info, err := os.Stat(basePid); err == nil && info.IsDir() {
+		// Directory exists, create unique PID file name
+		for i := 1; i < 100; i++ {
+			uniqueName := fmt.Sprintf("/var/run/keyphy_%d.pid", i)
+			if _, err := os.Stat(uniqueName); os.IsNotExist(err) {
+				return uniqueName
+			}
+		}
+	}
+	return basePid
 }
