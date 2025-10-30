@@ -100,23 +100,13 @@ go build -o keyphy ./cmd/keyphy
 make build
 ```
 
-## Contributing
-
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
-
-## Security
-
-For security-related issues, please see our [Security Policy](SECURITY.md).
-
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- 📖 [Documentation](https://github.com/gajzzs/keyphy/wiki)
 - 🐛 [Issue Tracker](https://github.com/gajzzs/keyphy/issues)
-- 💬 [Discussions](https://github.com/gajzzs/keyphy/discussions)
 
 ## Warning
 
