@@ -14,12 +14,14 @@ import (
 	"github.com/gajzzs/keyphy/internal/config"
 	"github.com/gajzzs/keyphy/internal/crypto"
 	"github.com/gajzzs/keyphy/internal/device"
+	"github.com/gajzzs/keyphy/internal/system"
 )
 
 type Daemon struct {
 	appBlocker     *blocker.AppBlocker
 	networkBlocker *blocker.NetworkBlocker
 	fileBlocker    *blocker.FileBlocker
+	sysMonitor     *system.SystemMonitor
 	running        bool
 	blocksActive   bool
 	ctx            context.Context
@@ -32,6 +34,7 @@ func NewDaemon() *Daemon {
 		appBlocker:     blocker.NewAppBlocker(),
 		networkBlocker: blocker.NewNetworkBlocker(),
 		fileBlocker:    blocker.NewFileBlocker(),
+		sysMonitor:     system.NewSystemMonitor(),
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -65,6 +68,8 @@ func (d *Daemon) startDaemon() error {
 	go d.monitorNetwork()
 	go d.monitorProcesses()
 	go d.monitorConfigFile()
+	go d.monitorIntegrity()
+	go d.monitorSystemActivity()
 	go d.handleSignals()
 	go d.selfProtection()
 
@@ -303,13 +308,46 @@ func (d *Daemon) monitorProcesses() {
 				continue
 			}
 			cfg := config.GetConfig()
-			for _, app := range cfg.BlockedApps {
-				if pids, err := d.appBlocker.GetRunningProcesses(app); err == nil {
-					for _, pid := range pids {
-						if err := d.appBlocker.BlockProcessLaunch(pid); err != nil {
-							log.Printf("Failed to block process %d: %v", pid, err)
-						}
+			
+			// Use gopsutil for enhanced process monitoring
+			if blockedPids, err := d.sysMonitor.MonitorProcesses(cfg.BlockedApps); err == nil {
+				for _, pid := range blockedPids {
+					if err := d.appBlocker.BlockProcessLaunch(int(pid)); err != nil {
+						log.Printf("Failed to block process %d: %v", pid, err)
 					}
+				}
+			}
+		}
+	}
+}
+
+func (d *Daemon) monitorSystemActivity() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-ticker.C:
+			if !d.blocksActive {
+				continue
+			}
+			
+			// Monitor for suspicious activity
+			if alerts, err := d.sysMonitor.DetectSuspiciousActivity(); err == nil {
+				for _, alert := range alerts {
+					log.Printf("SECURITY ALERT: %s", alert)
+				}
+			}
+			
+			// Log system info periodically
+			if sysInfo, err := d.sysMonitor.GetSystemInfo(); err == nil {
+				if cpuPercent, ok := sysInfo["cpu_percent"].(float64); ok && cpuPercent > 80 {
+					log.Printf("High CPU usage: %.2f%%", cpuPercent)
+				}
+				if memPercent, ok := sysInfo["memory_percent"].(float64); ok && memPercent > 90 {
+					log.Printf("High memory usage: %.2f%%", memPercent)
 				}
 			}
 		}
@@ -406,6 +444,35 @@ func (d *Daemon) enableProcessProtection() error {
 	// Set process name to make it harder to identify
 	exec.Command("prctl", "PR_SET_NAME", "[kworker/0:1]").Run()
 	return nil
+}
+
+func (d *Daemon) monitorIntegrity() {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-ticker.C:
+			if !d.blocksActive {
+				continue
+			}
+			
+			// Verify integrity of blocked executables
+			if err := d.appBlocker.VerifyIntegrity(); err != nil {
+				log.Printf("SECURITY ALERT: Integrity violation detected - %v", err)
+				log.Println("Re-enforcing all blocks...")
+				
+				// Re-enforce blocks immediately
+				if err := d.appBlocker.EnforceBlocks(); err != nil {
+					log.Printf("CRITICAL: Failed to re-enforce blocks: %v", err)
+				} else {
+					log.Println("Blocks re-enforced successfully")
+				}
+			}
+		}
+	}
 }
 
 func (d *Daemon) selfProtection() {

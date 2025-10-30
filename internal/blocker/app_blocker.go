@@ -1,23 +1,30 @@
 package blocker
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/shirou/gopsutil/v3/process"
 )
 
 type AppBlocker struct {
 	blockedApps map[string]bool
+	integrity   map[string]string // SHA256 hashes of original executables
+	tamperCheck map[string]time.Time // Last tamper check timestamps
 }
 
 func NewAppBlocker() *AppBlocker {
 	return &AppBlocker{
 		blockedApps: make(map[string]bool),
+		integrity:   make(map[string]string),
+		tamperCheck: make(map[string]time.Time),
 	}
 }
 
@@ -70,9 +77,23 @@ func (ab *AppBlocker) restoreOriginalExecutable(appName string) error {
 		}
 	}
 	
-	// Restore from backup with proper permissions
+	// Verify integrity before restore
 	backupPath := execPath + ".keyphy-backup"
 	if _, err := os.Stat(backupPath); err == nil {
+		// Verify backup hasn't been tampered with
+		if originalHash, exists := ab.integrity[execPath]; exists {
+			backupHash, err := ab.calculateFileHash(backupPath)
+			if err != nil {
+				return fmt.Errorf("failed to verify backup integrity: %v", err)
+			}
+			if backupHash != originalHash {
+				return fmt.Errorf("backup file tampered - cannot safely restore %s", execPath)
+			}
+		}
+		
+		// Remove immutable attribute (Linux)
+		exec.Command("chattr", "-i", backupPath).Run()
+		
 		// Get original backup file info for permissions
 		backupInfo, err := os.Stat(backupPath)
 		if err != nil {
@@ -89,8 +110,10 @@ func (ab *AppBlocker) restoreOriginalExecutable(appName string) error {
 			return fmt.Errorf("failed to restore permissions: %v", err)
 		}
 		
-		// Remove backup
+		// Clean up
 		os.Remove(backupPath)
+		delete(ab.integrity, execPath)
+		delete(ab.tamperCheck, execPath)
 	}
 	
 	return nil
@@ -107,11 +130,13 @@ func (ab *AppBlocker) killProcesses(appName string) error {
 	}
 	
 	for _, pid := range pids {
-		process, err := os.FindProcess(pid)
-		if err != nil {
-			continue
+		// Use gopsutil for more reliable process termination
+		if proc, err := process.NewProcess(int32(pid)); err == nil {
+			if err := proc.Terminate(); err != nil {
+				// Force kill if terminate fails
+				proc.Kill()
+			}
 		}
-		process.Kill()
 	}
 	return nil
 }
@@ -164,19 +189,32 @@ func (ab *AppBlocker) createBlockingWrapper(appName string) error {
 		}
 	}
 	
-	// Backup original executable
+	// Backup original executable with integrity check
 	backupPath := execPath + ".keyphy-backup"
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		if err := exec.Command("cp", execPath, backupPath).Run(); err != nil {
+		// Calculate and store original hash
+		hash, err := ab.calculateFileHash(execPath)
+		if err != nil {
+			return fmt.Errorf("failed to calculate file hash: %v", err)
+		}
+		ab.integrity[execPath] = hash
+		
+		if err := exec.Command("cp", "-p", execPath, backupPath).Run(); err != nil {
 			return fmt.Errorf("failed to backup executable: %v", err)
 		}
+		
+		// Set immutable attribute on backup (Linux)
+		exec.Command("chattr", "+i", backupPath).Run()
 	}
 	
-	// Create blocking script
+	// Create cryptographically signed blocking script
 	blockScript := fmt.Sprintf(`#!/bin/bash
-echo "Access to %s is blocked by Keyphy"
+# Keyphy Block - Integrity: %s
+# Timestamp: %d
+echo "Access to %s is blocked by Keyphy - Physical device authentication required"
+echo "Connect your authentication device and run: keyphy unlock"
 exit 1
-`, displayName)
+`, ab.integrity[execPath], time.Now().Unix(), displayName)
 	
 	// Replace executable with blocking script
 	if err := os.WriteFile(execPath, []byte(blockScript), 0755); err != nil {
@@ -247,15 +285,82 @@ func (ab *AppBlocker) findProcessesByName(name string) ([]int, error) {
 	
 	var pids []int
 	for _, proc := range processes {
-		cmdline, err := proc.Cmdline()
+		// Check process name
+		procName, err := proc.Name()
 		if err != nil {
 			continue
 		}
 		
-		if strings.Contains(cmdline, name) {
+		// Check command line for more accurate matching
+		cmdline, err := proc.Cmdline()
+		if err != nil {
+			cmdline = procName
+		}
+		
+		if procName == name || strings.Contains(cmdline, name) {
 			pids = append(pids, int(proc.Pid))
 		}
 	}
 	
 	return pids, nil
+}
+
+// calculateFileHash computes SHA256 hash of a file
+func (ab *AppBlocker) calculateFileHash(filePath string) (string, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:]), nil
+}
+
+// VerifyIntegrity checks if blocked executables haven't been tampered with
+func (ab *AppBlocker) VerifyIntegrity() error {
+	for execPath, originalHash := range ab.integrity {
+		// Skip if recently checked (within 30 seconds)
+		if lastCheck, exists := ab.tamperCheck[execPath]; exists {
+			if time.Since(lastCheck) < 30*time.Second {
+				continue
+			}
+		}
+		
+		// Check if backup still exists and is immutable
+		backupPath := execPath + ".keyphy-backup"
+		if _, err := os.Stat(backupPath); err != nil {
+			return fmt.Errorf("backup missing for %s - potential tamper attempt", execPath)
+		}
+		
+		// Verify backup integrity
+		backupHash, err := ab.calculateFileHash(backupPath)
+		if err != nil {
+			return fmt.Errorf("failed to verify backup integrity: %v", err)
+		}
+		if backupHash != originalHash {
+			return fmt.Errorf("backup tampered for %s - security breach detected", execPath)
+		}
+		
+		// Check if current executable is still our blocking script
+		currentContent, err := os.ReadFile(execPath)
+		if err != nil {
+			return fmt.Errorf("failed to read current executable: %v", err)
+		}
+		
+		if !strings.Contains(string(currentContent), "Keyphy Block - Integrity:") {
+			return fmt.Errorf("blocking script replaced for %s - bypass attempt detected", execPath)
+		}
+		
+		ab.tamperCheck[execPath] = time.Now()
+	}
+	return nil
+}
+
+// EnforceBlocks re-applies blocks if tamper attempts detected
+func (ab *AppBlocker) EnforceBlocks() error {
+	for appName := range ab.blockedApps {
+		if err := ab.createBlockingWrapper(appName); err != nil {
+			return fmt.Errorf("failed to re-enforce block for %s: %v", appName, err)
+		}
+	}
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"github.com/spf13/cobra"
 	"github.com/manifoldco/promptui"
+	"github.com/gajzzs/keyphy/internal/auth"
 	"github.com/gajzzs/keyphy/internal/blocker"
 	"github.com/gajzzs/keyphy/internal/config"
 	"github.com/gajzzs/keyphy/internal/crypto"
@@ -118,7 +119,7 @@ func NewUnblockCommand() *cobra.Command {
 }
 
 func NewResetCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "reset",
 		Short: "Reset keyphy - remove all blocks, restore system, and stop service",
 		DisableFlagsInUseLine: true,
@@ -127,12 +128,46 @@ func NewResetCommand() *cobra.Command {
 				return fmt.Errorf("authentication device not connected or invalid")
 			}
 			
+			if os.Geteuid() != 0 {
+				return execWithSudo("reset")
+			}
+			
+			return performReset()
+		},
+	}
+	
+	// Add hidden emergency reset command
+	emergencyCmd := &cobra.Command{
+		Use:    "emergency",
+		Short:  "Emergency reset without device authentication",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Geteuid() != 0 {
+				return execWithSudo("reset", "emergency")
+			}
+			
+			fmt.Println("WARNING: Emergency reset bypasses device authentication!")
+			return performReset()
+		},
+	}
+	
+	cmd.AddCommand(emergencyCmd)
+	return cmd
+}
+
+func performReset() error {
+			
 			fmt.Println("Resetting keyphy system...")
 			
-			// Stop daemon first
-			fmt.Println("Stopping daemon...")
-			if err := service.SendStopSignal(); err != nil {
-				fmt.Printf("Warning: Failed to stop daemon: %v\n", err)
+			// Stop service properly
+			fmt.Println("Stopping service...")
+			sm, err := service.NewServiceManager()
+			if err == nil {
+				if err := sm.Stop(); err != nil {
+					fmt.Printf("Warning: Failed to stop service: %v\n", err)
+				} else {
+					fmt.Println("Service stopped successfully")
+				}
 			}
 			
 			// Remove all blocking rules
@@ -159,18 +194,24 @@ func NewResetCommand() *cobra.Command {
 				}
 			}
 			
-			// Clear config
+			// Clear all configuration including auth device
+			fmt.Println("Clearing configuration...")
 			cfg.BlockedApps = []string{}
 			cfg.BlockedWebsites = []string{}
 			cfg.BlockedPaths = []string{}
+			cfg.AuthDevice = ""
+			cfg.AuthDeviceName = ""
+			cfg.AuthKey = ""
+			cfg.AuthMountState = ""
+			cfg.EnforceState = false
 			if err := config.SaveConfig(); err != nil {
 				fmt.Printf("Warning: Failed to clear config: %v\n", err)
+			} else {
+				fmt.Println("Configuration cleared successfully")
 			}
 			
-			fmt.Println("Keyphy system reset complete - all blocks removed and service stopped")
-			return nil
-		},
-	}
+	fmt.Println("Keyphy system reset complete - all blocks removed, auth cleared, and service stopped")
+	return nil
 }
 
 func NewListCommand() *cobra.Command {
@@ -299,39 +340,36 @@ func NewDeviceCommand() *cobra.Command {
 			}
 			
 			dev := selectedDevice
-			if true {
-					fmt.Printf("Found device: %s (UUID: %s)\n", dev.Name, dev.UUID)
-					
-					// Determine mount state
-					mountState := "unmounted"
-					if dev.MountPoint != "(not mounted)" {
-						if strings.Contains(dev.MountPoint, "encrypted") {
-							mountState = "mounted-encrypted"
-						} else {
-							mountState = "mounted"
-						}
-					}
-					
-					fmt.Printf("Current state: %s, UUID: %s, Name: %s\n", mountState, dev.UUID, dev.Name)
-					
-					if enforceState {
-						fmt.Printf("State enforcement enabled - device must be %s for authentication\n", mountState)
-					} else {
-						fmt.Println("State enforcement disabled - device works in any mount state")
-					}
-					
-					fmt.Println("Generating authentication key...")
-					cfg := config.GetConfig()
-					cfg.AuthDevice = dev.UUID
-					cfg.AuthDeviceName = dev.Name
-					cfg.AuthMountState = mountState
-					cfg.EnforceState = enforceState
-					cfg.AuthKey = crypto.GenerateDeviceKey(dev.UUID, dev.Name)
-					
-					fmt.Printf("Device '%s' selected as authentication device\n", dev.Name)
-					return config.SaveConfig()
+			fmt.Printf("Found device: %s (UUID: %s)\n", dev.Name, dev.UUID)
+			
+			// Determine mount state
+			mountState := "unmounted"
+			if dev.MountPoint != "(not mounted)" {
+				if strings.Contains(dev.MountPoint, "encrypted") {
+					mountState = "mounted-encrypted"
+				} else {
+					mountState = "mounted"
 				}
-			return nil
+			}
+			
+			fmt.Printf("Current state: %s, UUID: %s, Name: %s\n", mountState, dev.UUID, dev.Name)
+			
+			if enforceState {
+				fmt.Printf("State enforcement enabled - device must be %s for authentication\n", mountState)
+			} else {
+				fmt.Println("State enforcement disabled - device works in any mount state")
+			}
+			
+			fmt.Println("Generating authentication key...")
+			cfg := config.GetConfig()
+			cfg.AuthDevice = dev.UUID
+			cfg.AuthDeviceName = dev.Name
+			cfg.AuthMountState = mountState
+			cfg.EnforceState = enforceState
+			cfg.AuthKey = crypto.GenerateDeviceKey(dev.UUID, dev.Name)
+			
+			fmt.Printf("Device '%s' selected as authentication device\n", dev.Name)
+			return config.SaveConfig()
 		},
 	}
 	
@@ -555,59 +593,24 @@ func execWithSudo(args ...string) error {
 }
 
 func validateDeviceAuth() bool {
-	cfg := config.GetConfig()
-	if cfg.AuthDevice == "" || cfg.AuthKey == "" {
-		fmt.Println("No authentication device configured")
-		return false
-	}
+	auth := auth.NewPhysicalAuth()
 	
-	fmt.Println("Checking for authentication device...")
-	devices, err := device.ListUSBDevices()
+	fmt.Println("Performing enhanced device authentication...")
+	valid, err := auth.AuthenticateDevice()
 	if err != nil {
-		fmt.Printf("Failed to scan USB devices: %v\n", err)
+		fmt.Printf("Authentication failed: %v\n", err)
 		return false
 	}
 	
-	for _, dev := range devices {
-		if dev.UUID == cfg.AuthDevice {
-			fmt.Printf("Found authentication device: %s\n", dev.Name)
-			
-			// Check mount state if enforcement is enabled
-			if cfg.EnforceState {
-				currentState := "unmounted"
-				if dev.MountPoint != "(not mounted)" {
-					if strings.Contains(dev.MountPoint, "encrypted") {
-						currentState = "mounted-encrypted"
-					} else {
-						currentState = "mounted"
-					}
-				}
-				
-				fmt.Printf("Required state: %s, Current state: %s\n", cfg.AuthMountState, currentState)
-				
-				if currentState != cfg.AuthMountState {
-					fmt.Printf("Device state mismatch! Expected '%s' but found '%s'\n", cfg.AuthMountState, currentState)
-					return false
-				}
-				fmt.Println("Device state matches required state")
-			} else {
-				fmt.Println("State enforcement disabled - accepting any mount state")
-			}
-			
-			fmt.Println("Validating device authentication...")
-			valid, err := crypto.ValidateDeviceAuth(dev.UUID, dev.Name, cfg.AuthKey)
-			if err != nil {
-				fmt.Printf("Authentication validation failed: %v\n", err)
-				return false
-			}
-			if valid {
-				fmt.Println("Device authentication successful")
-			} else {
-				fmt.Println("Device authentication failed")
-			}
-			return valid
+	if valid {
+		fmt.Println("Physical device authentication successful")
+		status := auth.GetAuthStatus()
+		if status["tamper_detected"].(bool) {
+			fmt.Println("WARNING: Tamper attempt detected but authentication succeeded")
 		}
+		return true
 	}
-	fmt.Println("Authentication device not connected")
+	
+	fmt.Println("Physical device authentication failed")
 	return false
 }
