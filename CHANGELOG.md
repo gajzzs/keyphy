@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2024-01-XX
+## [1.0.1] - 2025-10-30
+
+### Fixed
+- Fixed daemon process monitoring continuing to kill processes after unlock signal
+- Added `blocksActive` state tracking to prevent unnecessary process termination
+- Resolved issue where applications like htop were killed even when blocks were disabled
+- Improved daemon state management for lock/unlock operations
+
+## [1.0.0] - 2025-10-30
 
 ### Added
 - Initial release of Keyphy
