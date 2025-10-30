@@ -70,12 +70,25 @@ func (ab *AppBlocker) restoreOriginalExecutable(appName string) error {
 		}
 	}
 	
-	// Restore from backup
+	// Restore from backup with proper permissions
 	backupPath := execPath + ".keyphy-backup"
 	if _, err := os.Stat(backupPath); err == nil {
-		if err := exec.Command("cp", backupPath, execPath).Run(); err != nil {
+		// Get original backup file info for permissions
+		backupInfo, err := os.Stat(backupPath)
+		if err != nil {
+			return fmt.Errorf("failed to get backup file info: %v", err)
+		}
+		
+		// Restore file with original permissions
+		if err := exec.Command("cp", "-p", backupPath, execPath).Run(); err != nil {
 			return fmt.Errorf("failed to restore executable: %v", err)
 		}
+		
+		// Ensure correct permissions are set
+		if err := os.Chmod(execPath, backupInfo.Mode()); err != nil {
+			return fmt.Errorf("failed to restore permissions: %v", err)
+		}
+		
 		// Remove backup
 		os.Remove(backupPath)
 	}

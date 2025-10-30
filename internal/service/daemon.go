@@ -187,8 +187,30 @@ func (d *Daemon) applyBlocks() error {
 func (d *Daemon) removeAllBlocks() error {
 	cfg := config.GetConfig()
 
-	log.Println("Removing all blocking rules...")
-	// Unblock applications
+	log.Println("Removing all blocking rules and restoring system state...")
+	
+	// Restore hosts file to clean state
+	log.Println("Restoring /etc/hosts file...")
+	if err := d.networkBlocker.UnprotectHostsFile(); err != nil {
+		log.Printf("Warning: Failed to unprotect hosts file: %v", err)
+	}
+	
+	// Unblock websites (removes hosts entries and iptables rules)
+	for _, website := range cfg.BlockedWebsites {
+		log.Printf("Unblocking website: %s", website)
+		if err := d.networkBlocker.UnblockWebsite(website); err != nil {
+			log.Printf("Failed to unblock website %s: %v", website, err)
+		} else {
+			log.Printf("Successfully unblocked website: %s", website)
+		}
+	}
+	
+	// Remove all network blocks
+	if err := d.networkBlocker.UnblockAll(); err != nil {
+		log.Printf("Warning: Failed to remove all network blocks: %v", err)
+	}
+
+	// Unblock applications and restore original permissions
 	for _, app := range cfg.BlockedApps {
 		log.Printf("Unblocking application: %s", app)
 		if err := d.appBlocker.UnblockApp(app); err != nil {
@@ -198,17 +220,7 @@ func (d *Daemon) removeAllBlocks() error {
 		}
 	}
 
-	// Unblock websites
-	for _, website := range cfg.BlockedWebsites {
-		log.Printf("Unblocking website: %s", website)
-		if err := d.networkBlocker.UnblockWebsite(website); err != nil {
-			log.Printf("Failed to unblock website %s: %v", website, err)
-		} else {
-			log.Printf("Successfully unblocked website: %s", website)
-		}
-	}
-
-	// Unblock file paths
+	// Unblock file paths and restore original permissions
 	for _, path := range cfg.BlockedPaths {
 		log.Printf("Unblocking path: %s", path)
 		if err := d.fileBlocker.UnblockPath(path); err != nil {
@@ -218,7 +230,7 @@ func (d *Daemon) removeAllBlocks() error {
 		}
 	}
 
-	log.Println("All blocking rules removed successfully")
+	log.Println("All blocking rules removed and system state restored successfully")
 	return nil
 }
 
@@ -316,7 +328,11 @@ func (d *Daemon) handleSignals() {
 			switch sig {
 			case syscall.SIGUSR1:
 				log.Println("Received unlock signal")
-				log.Println("Removing blocks...")
+				if !d.validateDeviceAuth() {
+					log.Println("Unlock denied - auth device not connected or invalid")
+					continue
+				}
+				log.Println("Device authenticated, removing blocks...")
 				if err := d.removeAllBlocks(); err != nil {
 					log.Printf("Failed to remove blocks: %v", err)
 				} else {
@@ -325,7 +341,11 @@ func (d *Daemon) handleSignals() {
 				}
 			case syscall.SIGUSR2:
 				log.Println("Received lock signal")
-				log.Println("Applying blocks...")
+				if !d.validateDeviceAuth() {
+					log.Println("Lock denied - auth device not connected or invalid")
+					continue
+				}
+				log.Println("Device authenticated, applying blocks...")
 				if err := d.applyBlocks(); err != nil {
 					log.Printf("Failed to apply blocks: %v", err)
 				} else {

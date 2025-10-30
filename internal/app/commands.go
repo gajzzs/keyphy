@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"github.com/spf13/cobra"
+	"github.com/manifoldco/promptui"
 	"github.com/gajzzs/keyphy/internal/blocker"
 	"github.com/gajzzs/keyphy/internal/config"
 	"github.com/gajzzs/keyphy/internal/crypto"
@@ -256,7 +257,7 @@ func NewDeviceCommand() *cobra.Command {
 	selectCmd := &cobra.Command{
 		Use:   "select [device-uuid]",
 		Short: "Select device for authentication",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println("Scanning for USB devices...")
@@ -267,8 +268,37 @@ func NewDeviceCommand() *cobra.Command {
 			
 			enforceState, _ := cmd.Flags().GetBool("save-state")
 			
-			for _, dev := range devices {
-				if dev.UUID == args[0] {
+			var selectedDevice device.Device
+			
+			if len(args) == 0 {
+				prompt := promptui.Select{
+					Label: "Select USB Device",
+					Items: devices,
+					Templates: &promptui.SelectTemplates{
+						Active:   "▶ {{ .Name | cyan }} ({{ .UUID | faint }})",
+						Inactive: "  {{ .Name | cyan }} ({{ .UUID | faint }})",
+						Selected: "✔ {{ .Name | red | cyan }}",
+					},
+				}
+				i, _, err := prompt.Run()
+				if err != nil {
+					return err
+				}
+				selectedDevice = devices[i]
+			} else {
+				for _, dev := range devices {
+					if dev.UUID == args[0] {
+						selectedDevice = dev
+						break
+					}
+				}
+				if selectedDevice.UUID == "" {
+					return fmt.Errorf("device with UUID %s not found", args[0])
+				}
+			}
+			
+			dev := selectedDevice
+			if true {
 					fmt.Printf("Found device: %s (UUID: %s)\n", dev.Name, dev.UUID)
 					
 					// Determine mount state
@@ -300,8 +330,7 @@ func NewDeviceCommand() *cobra.Command {
 					fmt.Printf("Device '%s' selected as authentication device\n", dev.Name)
 					return config.SaveConfig()
 				}
-			}
-			return fmt.Errorf("device with UUID %s not found", args[0])
+			return nil
 		},
 	}
 	

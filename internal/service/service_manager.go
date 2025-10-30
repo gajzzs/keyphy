@@ -35,12 +35,15 @@ func NewServiceManager() (*ServiceManager, error) {
 	}
 
 	svcConfig := &service.Config{
-		Name:        "keyphy",
+		Name:        "com.keyphy.daemon",
 		DisplayName: "Keyphy Access Control",
 		Description: "System access control using external device authentication",
 		Executable:  execPath,
 		Arguments:   []string{"service", "run-daemon"},
-		Dependencies: []string{},
+		Option: service.KeyValue{
+			"RunAtLoad": true,
+			"KeepAlive": true,
+		},
 	}
 
 	daemon := NewDaemon()
@@ -77,8 +80,22 @@ func (sm *ServiceManager) Restart() error {
 	return sm.service.Restart()
 }
 
-func (sm *ServiceManager) Status() (service.Status, error) {
-	return sm.service.Status()
+func (sm *ServiceManager) Status() (string, error) {
+	status, err := sm.service.Status()
+	if err != nil {
+		return "Unknown", err
+	}
+	
+	switch status {
+	case service.StatusRunning:
+		return "Running", nil
+	case service.StatusStopped:
+		return "Stopped", nil
+	case service.StatusUnknown:
+		return "Unknown", nil
+	default:
+		return fmt.Sprintf("Status(%d)", int(status)), nil
+	}
 }
 
 func (sm *ServiceManager) Run() error {
@@ -89,11 +106,11 @@ func (sm *ServiceManager) Run() error {
 func GetServiceConfigPath() string {
 	switch service.Platform() {
 	case "linux-systemd":
-		return "/etc/systemd/system/keyphy.service"
+		return "/etc/systemd/system/com.keyphy.daemon.service"
 	case "darwin-launchd":
-		return filepath.Join(os.Getenv("HOME"), "Library/LaunchAgents/com.keyphy.daemon.plist")
+		return "/Library/LaunchDaemons/com.keyphy.daemon.plist"
 	case "windows-service":
-		return "Registry: HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\keyphy"
+		return "Registry: HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\com.keyphy.daemon"
 	default:
 		return "Unknown platform"
 	}

@@ -59,12 +59,15 @@ func (nm *macNetworkManager) UnblockIP(ip string) error {
 }
 
 func (nm *macNetworkManager) blockWithPfctl(domain string) error {
-	// Create pfctl rules for domain blocking
-	rules := fmt.Sprintf(`
-block out proto tcp to any port 80 
-block out proto tcp to any port 443
-block out proto udp to any port 53
-`)
+	// Create pfctl rules for both IPv4 and IPv6
+	rules := `
+block out inet proto tcp to any port 80
+block out inet proto tcp to any port 443
+block out inet proto udp to any port 53
+block out inet6 proto tcp to any port 80
+block out inet6 proto tcp to any port 443
+block out inet6 proto udp to any port 53
+`
 	
 	cmd := exec.Command("pfctl", "-a", "keyphy", "-f", "-")
 	cmd.Stdin = strings.NewReader(rules)
@@ -93,7 +96,7 @@ func (nm *macNetworkManager) addToHosts(domain string) error {
 		return nil
 	}
 	
-	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n", domain, domain, domain, domain, domain)
+	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n::1 %s\n::1 www.%s\n", domain, domain, domain, domain, domain, domain, domain)
 	
 	return os.WriteFile(hostsFile, []byte(newContent), 0600)
 }
@@ -118,7 +121,7 @@ func (nm *macNetworkManager) removeFromHosts(domain string) error {
 			inKeyphyBlock = true
 			continue
 		}
-		if inKeyphyBlock && (strings.Contains(line, domain) || strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0")) {
+		if inKeyphyBlock && (strings.Contains(line, domain) || strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0") || strings.HasPrefix(line, "::1")) {
 			continue
 		}
 		if inKeyphyBlock && strings.HasPrefix(line, "#") {

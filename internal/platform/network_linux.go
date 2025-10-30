@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/vishvananda/netlink"
 )
 
@@ -86,15 +87,43 @@ func (nm *linuxNetworkManager) UnblockIP(ip string) error {
 }
 
 func (nm *linuxNetworkManager) blockDNS(domain string) error {
-	// DNS blocking via hosts file is sufficient for most cases
-	// For advanced blocking, we rely on hosts file modification
-	// which is more reliable than iptables string matching
-	return nil
+	// IPv4 iptables
+	ipt, err := iptables.New()
+	if err != nil {
+		return err
+	}
+	
+	ipt.Insert("filter", "OUTPUT", 1, "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	ipt.Insert("filter", "OUTPUT", 1, "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	
+	// IPv6 ip6tables
+	ipt6, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
+	if err != nil {
+		return err
+	}
+	
+	ipt6.Insert("filter", "OUTPUT", 1, "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	return ipt6.Insert("filter", "OUTPUT", 1, "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 }
 
 func (nm *linuxNetworkManager) unblockDNS(domain string) error {
-	// DNS unblocking handled by hosts file removal
-	return nil
+	// IPv4 iptables
+	ipt, err := iptables.New()
+	if err != nil {
+		return err
+	}
+	
+	ipt.Delete("filter", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	ipt.Delete("filter", "OUTPUT", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	
+	// IPv6 ip6tables
+	ipt6, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
+	if err != nil {
+		return err
+	}
+	
+	ipt6.Delete("filter", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
+	return ipt6.Delete("filter", "OUTPUT", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
 }
 
 func (nm *linuxNetworkManager) addToHosts(domain string) error {
@@ -113,7 +142,7 @@ func (nm *linuxNetworkManager) addToHosts(domain string) error {
 		return nil
 	}
 	
-	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n", domain, domain, domain, domain, domain)
+	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n::1 %s\n::1 www.%s\n", domain, domain, domain, domain, domain, domain, domain)
 	
 	return os.WriteFile(hostsFile, []byte(newContent), 0600)
 }
@@ -138,7 +167,7 @@ func (nm *linuxNetworkManager) removeFromHosts(domain string) error {
 			inKeyphyBlock = true
 			continue
 		}
-		if inKeyphyBlock && (strings.Contains(line, domain) || strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0")) {
+		if inKeyphyBlock && (strings.Contains(line, domain) || strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0") || strings.HasPrefix(line, "::1")) {
 			continue
 		}
 		if inKeyphyBlock && strings.HasPrefix(line, "#") {

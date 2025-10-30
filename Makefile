@@ -9,12 +9,11 @@ LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION)"
 
 build:
 	@echo "Building keyphy..."
-	@mkdir -p $(BUILD_DIR)
-	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/keyphy
+	@go build -o $(BINARY_NAME) ./cmd/keyphy
 
 install: build
 	@echo "Installing keyphy..."
-	@sudo cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/
+	@sudo cp $(BINARY_NAME) $(INSTALL_DIR)/
 	@sudo chmod +x $(INSTALL_DIR)/$(BINARY_NAME)
 	@sudo mkdir -p /etc/keyphy
 	@echo "Installation complete. Run 'keyphy --help' to get started."

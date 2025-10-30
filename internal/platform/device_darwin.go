@@ -4,9 +4,9 @@
 package platform
 
 import (
-	"encoding/json"
 	"os/exec"
 	"strings"
+	"howett.net/plist"
 )
 
 type macDeviceManager struct{}
@@ -16,16 +16,16 @@ func newDeviceManager() DeviceManager {
 }
 
 type diskutilDevice struct {
-	DeviceIdentifier string `json:"DeviceIdentifier"`
-	VolumeName       string `json:"VolumeName"`
-	VolumeUUID       string `json:"VolumeUUID"`
-	MountPoint       string `json:"MountPoint"`
+	DeviceIdentifier string `plist:"DeviceIdentifier"`
+	VolumeName       string `plist:"VolumeName"`
+	VolumeUUID       string `plist:"VolumeUUID"`
+	MountPoint       string `plist:"MountPoint"`
 }
 
 type diskutilOutput struct {
 	AllDisksAndPartitions []struct {
-		Partitions []diskutilDevice `json:"Partitions"`
-	} `json:"AllDisksAndPartitions"`
+		Partitions []diskutilDevice `plist:"Partitions"`
+	} `plist:"AllDisksAndPartitions"`
 }
 
 func (dm *macDeviceManager) ListUSBDevices() ([]Device, error) {
@@ -37,23 +37,38 @@ func (dm *macDeviceManager) ListUSBDevices() ([]Device, error) {
 	}
 	
 	var diskutil diskutilOutput
-	if err := json.Unmarshal(output, &diskutil); err != nil {
+	if _, err := plist.Unmarshal(output, &diskutil); err != nil {
 		return nil, err
 	}
 	
 	var devices []Device
 	for _, disk := range diskutil.AllDisksAndPartitions {
 		for _, partition := range disk.Partitions {
-			if partition.VolumeUUID != "" {
-				mounted := partition.MountPoint != ""
-				devices = append(devices, Device{
-					UUID:       partition.VolumeUUID,
-					Name:       partition.VolumeName,
-					Path:       "/dev/" + partition.DeviceIdentifier,
-					Mounted:    mounted,
-					MountPoint: partition.MountPoint,
-				})
+			// Use VolumeUUID if available, otherwise use DeviceIdentifier
+			uuid := partition.VolumeUUID
+			if uuid == "" {
+				uuid = partition.DeviceIdentifier
 			}
+			
+			// Use VolumeName if available, otherwise use DeviceIdentifier
+			name := partition.VolumeName
+			if name == "" {
+				name = partition.DeviceIdentifier
+			}
+			
+			mounted := partition.MountPoint != ""
+			mountPoint := partition.MountPoint
+			if mountPoint == "" {
+				mountPoint = "(not mounted)"
+			}
+			
+			devices = append(devices, Device{
+				UUID:       uuid,
+				Name:       name,
+				Path:       "/dev/" + partition.DeviceIdentifier,
+				Mounted:    mounted,
+				MountPoint: mountPoint,
+			})
 		}
 	}
 	

@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>keyphy</string>
+    <string>com.keyphy.daemon</string>
     <key>Program</key>
     <string>/usr/local/bin/keyphy</string>
     <key>ProgramArguments</key>
     <array>
-        <string>keyphy</string>
+        <string>/usr/local/bin/keyphy</string>
         <string>service</string>
         <string>run-daemon</string>
     </array>
