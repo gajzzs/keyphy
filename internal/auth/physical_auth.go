@@ -1,4 +1,4 @@
-rpackage auth
+package auth
 
 import (
 	"crypto/rand"
@@ -89,14 +89,14 @@ func (pa *PhysicalAuth) AuthenticateDevice() (bool, error) {
 }
 
 // createDeviceFingerprint creates unique fingerprint to detect device cloning
-func (pa *PhysicalAuth) createDeviceFingerprint(dev device.USBDevice) string {
-	data := fmt.Sprintf("%s:%s:%s:%s", dev.UUID, dev.Name, dev.Vendor, dev.Product)
+func (pa *PhysicalAuth) createDeviceFingerprint(dev device.Device) string {
+	data := fmt.Sprintf("%s:%s:%s", dev.UUID, dev.Name, dev.DevPath)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
 
 // validateDeviceState ensures device is in required mount state
-func (pa *PhysicalAuth) validateDeviceState(dev device.USBDevice, cfg *config.Config) bool {
+func (pa *PhysicalAuth) validateDeviceState(dev device.Device, cfg *config.Config) bool {
 	currentState := "unmounted"
 	if dev.MountPoint != "(not mounted)" {
 		if strings.Contains(dev.MountPoint, "encrypted") {
@@ -119,7 +119,7 @@ func (pa *PhysicalAuth) generateChallenge() (string, error) {
 }
 
 // createSessionToken creates tamper-evident session token
-func (pa *PhysicalAuth) createSessionToken(dev device.USBDevice) error {
+func (pa *PhysicalAuth) createSessionToken(dev device.Device) error {
 	tokenDir := "/tmp/keyphy-auth"
 	if err := os.MkdirAll(tokenDir, 0700); err != nil {
 		return err

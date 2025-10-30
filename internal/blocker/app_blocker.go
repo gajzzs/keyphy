@@ -1,3 +1,6 @@
+//go:build !darwin
+// +build !darwin
+
 package blocker
 
 import (
@@ -132,9 +135,15 @@ func (ab *AppBlocker) killProcesses(appName string) error {
 	for _, pid := range pids {
 		// Use gopsutil for more reliable process termination
 		if proc, err := process.NewProcess(int32(pid)); err == nil {
+			// Try graceful termination first
 			if err := proc.Terminate(); err != nil {
 				// Force kill if terminate fails
 				proc.Kill()
+			}
+			// Wait a moment then verify it's dead
+			time.Sleep(100 * time.Millisecond)
+			if exists, _ := proc.IsRunning(); exists {
+				proc.Kill() // Force kill
 			}
 		}
 	}
@@ -297,8 +306,20 @@ func (ab *AppBlocker) findProcessesByName(name string) ([]int, error) {
 			cmdline = procName
 		}
 		
-		if procName == name || strings.Contains(cmdline, name) {
+		// For macOS apps, also check executable path
+		exe, _ := proc.Exe()
+		
+		// Match by name, cmdline, or executable path
+		if procName == name || strings.Contains(cmdline, name) || strings.Contains(exe, name) {
 			pids = append(pids, int(proc.Pid))
+		}
+		
+		// Special handling for macOS .app bundles
+		if strings.Contains(name, ".app/Contents/MacOS/") {
+			appName := filepath.Base(name)
+			if procName == appName || strings.Contains(exe, appName) {
+				pids = append(pids, int(proc.Pid))
+			}
 		}
 	}
 	
