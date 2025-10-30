@@ -31,7 +31,7 @@ func SendUnlockSignal() error {
 	// Check if process is actually running
 	if !isProcessRunning(pid) {
 		// Clean up stale PID file
-		os.Remove(getUniquePidFile())
+		os.Remove(GetUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
@@ -57,7 +57,7 @@ func SendLockSignal() error {
 	// Check if process is actually running
 	if !isProcessRunning(pid) {
 		// Clean up stale PID file
-		os.Remove(getUniquePidFile())
+		os.Remove(GetUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
@@ -112,7 +112,7 @@ func SendStopSignal() error {
 	// Check if process is actually running
 	if !isProcessRunning(pid) {
 		// Clean up stale PID file
-		os.Remove(getUniquePidFile())
+		os.Remove(GetUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
 	}
 	
@@ -126,7 +126,7 @@ func SendStopSignal() error {
 }
 
 func readPidFile() (int, error) {
-	pidFile := getUniquePidFile()
+	pidFile := GetUniquePidFile()
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		return 0, err
@@ -140,7 +140,7 @@ func readPidFile() (int, error) {
 	return pid, nil
 }
 
-func getUniquePidFile() string {
+func GetUniquePidFile() string {
 	basePid := "/var/run/keyphy.pid"
 	if _, err := os.Stat(basePid); os.IsNotExist(err) {
 		return basePid
