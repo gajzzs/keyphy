@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
+
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 func GetDaemonStatus() (bool, error) {
@@ -18,23 +19,21 @@ func GetDaemonStatus() (bool, error) {
 		os.Remove("/var/run/keyphy.pid")
 	}
 	
-	// Fallback: check for running processes
-	cmd := exec.Command("pgrep", "-f", "keyphy service run-daemon")
-	output, err := cmd.Output()
+	// Fallback: check for running processes using gopsutil
+	processes, err := process.Processes()
 	if err != nil {
 		return false, nil
 	}
 	
-	// Verify processes are actually running
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	runningCount := 0
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			if pid, err := strconv.Atoi(strings.TrimSpace(line)); err == nil {
-				if isProcessRunning(pid) {
-					runningCount++
-				}
-			}
+	for _, proc := range processes {
+		cmdline, err := proc.Cmdline()
+		if err != nil {
+			continue
+		}
+		
+		if strings.Contains(cmdline, "keyphy service run-daemon") {
+			runningCount++
 		}
 	}
 	
@@ -79,14 +78,24 @@ func RemovePidFile() error {
 }
 
 func StopAllDaemons() error {
-	// Kill all keyphy daemon processes
-	cmd := exec.Command("pkill", "-f", "keyphy service run-daemon")
-	if err := cmd.Run(); err != nil {
-		// If no processes found, that's actually success
-		if err.Error() == "exit status 1" {
-			return nil // No processes to kill
+	// Kill all keyphy daemon processes using gopsutil
+	processes, err := process.Processes()
+	if err != nil {
+		return fmt.Errorf("failed to get processes: %v", err)
+	}
+	
+	killedCount := 0
+	for _, proc := range processes {
+		cmdline, err := proc.Cmdline()
+		if err != nil {
+			continue
 		}
-		return fmt.Errorf("failed to kill daemon processes: %v", err)
+		
+		if strings.Contains(cmdline, "keyphy service run-daemon") {
+			if err := proc.Kill(); err == nil {
+				killedCount++
+			}
+		}
 	}
 	
 	// Clean up PID file

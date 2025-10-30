@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 type AppBlocker struct {
@@ -86,8 +88,19 @@ func (ab *AppBlocker) IsBlocked(appName string) bool {
 }
 
 func (ab *AppBlocker) killProcesses(appName string) error {
-	cmd := exec.Command("pkill", "-f", appName)
-	return cmd.Run()
+	pids, err := ab.GetRunningProcesses(appName)
+	if err != nil {
+		return err
+	}
+	
+	for _, pid := range pids {
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			continue
+		}
+		process.Kill()
+	}
+	return nil
 }
 
 func (ab *AppBlocker) setupDBusMonitoring(appName string) error {
@@ -194,16 +207,9 @@ func (ab *AppBlocker) GetRunningProcesses(appName string) ([]int, error) {
 		}
 		
 		for _, term := range searchTerms {
-			cmd := exec.Command("pgrep", "-f", term)
-			output, err := cmd.Output()
+			processPids, err := ab.findProcessesByName(term)
 			if err == nil {
-				lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-				for _, line := range lines {
-					var pid int
-					if _, err := fmt.Sscanf(line, "%d", &pid); err == nil {
-						pids = append(pids, pid)
-					}
-				}
+				pids = append(pids, processPids...)
 			}
 		}
 	} else {
@@ -211,17 +217,30 @@ func (ab *AppBlocker) GetRunningProcesses(appName string) ([]int, error) {
 		if strings.ContainsAny(searchTerm, ";|&$`(){}[]<>*?~") {
 			return nil, fmt.Errorf("invalid characters in app name: %s", searchTerm)
 		}
-		cmd := exec.Command("pgrep", "-f", searchTerm)
-		output, err := cmd.Output()
-		if err != nil {
-			return pids, nil
+		processPids, err := ab.findProcessesByName(searchTerm)
+		if err == nil {
+			pids = append(pids, processPids...)
 		}
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-		for _, line := range lines {
-			var pid int
-			if _, err := fmt.Sscanf(line, "%d", &pid); err == nil {
-				pids = append(pids, pid)
-			}
+	}
+	
+	return pids, nil
+}
+
+func (ab *AppBlocker) findProcessesByName(name string) ([]int, error) {
+	processes, err := process.Processes()
+	if err != nil {
+		return nil, err
+	}
+	
+	var pids []int
+	for _, proc := range processes {
+		cmdline, err := proc.Cmdline()
+		if err != nil {
+			continue
+		}
+		
+		if strings.Contains(cmdline, name) {
+			pids = append(pids, int(proc.Pid))
 		}
 	}
 	

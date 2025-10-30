@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"syscall"
 )
 
 type Config struct {
@@ -170,13 +170,36 @@ func removeDuplicates(slice []string) []string {
 }
 
 func ProtectConfigFile() {
-	// Make config file immutable to prevent tampering
-	exec.Command("chattr", "+i", ConfigFile).Run()
+	// Make config file immutable using syscall
+	file, err := os.Open(ConfigFile)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	
+	const FS_IOC_SETFLAGS = 0x40086602
+	const FS_IMMUTABLE_FL = 0x00000010
+	
+	syscall.Syscall(syscall.SYS_IOCTL,
+		file.Fd(),
+		uintptr(FS_IOC_SETFLAGS),
+		uintptr(FS_IMMUTABLE_FL))
 }
 
 func UnprotectConfigFile() {
-	// Remove immutable flag from config file
-	exec.Command("chattr", "-i", ConfigFile).Run()
+	// Remove immutable flag using syscall
+	file, err := os.Open(ConfigFile)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	
+	const FS_IOC_SETFLAGS = 0x40086602
+	
+	syscall.Syscall(syscall.SYS_IOCTL,
+		file.Fd(),
+		uintptr(FS_IOC_SETFLAGS),
+		uintptr(0x00000000))
 }
 
 func removeFromSlice(slice []string, item string) []string {

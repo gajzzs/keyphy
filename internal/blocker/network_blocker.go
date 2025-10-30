@@ -1,412 +1,54 @@
 package blocker
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"strings"
+	"github.com/gajzzs/keyphy/internal/platform"
 )
 
 type NetworkBlocker struct {
-	blockedDomains map[string]bool
-	ipBlocksAdded  bool
-	dohBlocksAdded bool
+	manager platform.NetworkManager
 }
 
 func NewNetworkBlocker() *NetworkBlocker {
 	return &NetworkBlocker{
-		blockedDomains: make(map[string]bool),
+		manager: platform.NewNetworkManager(),
 	}
 }
 
 func (nb *NetworkBlocker) BlockWebsite(domain string) error {
-	nb.blockedDomains[domain] = true
-	
-	// Block both domain and www subdomain
-	domains := []string{domain}
-	if !strings.HasPrefix(domain, "www.") {
-		domains = append(domains, "www."+domain)
-	}
-	
-	for _, d := range domains {
-		// Add to /etc/hosts
-		fmt.Printf("Adding %s to hosts file...\n", d)
-		if err := nb.addToHosts(d); err != nil {
-			return fmt.Errorf("failed to add %s to hosts: %v", d, err)
-		}
-		
-		// Block DNS queries
-		fmt.Printf("Creating iptables rules for %s...\n", d)
-		if err := nb.blockDNS(d); err != nil {
-			return fmt.Errorf("failed to block DNS for %s: %v", d, err)
-		}
-	}
-	
-	fmt.Printf("Website blocking rules created successfully for %s\n", domain)
-	return nil
+	return nb.manager.BlockDomain(domain)
 }
 
 func (nb *NetworkBlocker) UnblockWebsite(domain string) error {
-	delete(nb.blockedDomains, domain)
-	
-	// Remove from /etc/hosts
-	fmt.Printf("Removing %s from hosts file...\n", domain)
-	if err := nb.removeFromHosts(domain); err != nil {
-		return fmt.Errorf("failed to remove from hosts: %v", err)
-	}
-	
-	// Unblock DNS queries
-	fmt.Printf("Removing iptables rules for %s...\n", domain)
-	if err := nb.unblockDNS(domain); err != nil {
-		return fmt.Errorf("failed to unblock DNS: %v", err)
-	}
-	
-	fmt.Printf("Website unblocking completed for %s\n", domain)
-	return nil
+	return nb.manager.UnblockDomain(domain)
 }
 
-func (nb *NetworkBlocker) IsBlocked(domain string) bool {
-	return nb.blockedDomains[domain]
+func (nb *NetworkBlocker) BlockIP(ip string) error {
+	return nb.manager.BlockIP(ip)
 }
 
-func (nb *NetworkBlocker) blockDNS(domain string) error {
-	// Check if rule already exists to prevent duplicates
-	if nb.ruleExists(domain) {
-		return nil
-	}
-	
-	// Block DNS queries using iptables
-	cmd := exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-	
-	// Also block TCP DNS
-	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-	
-	// Block HTTPS connections to domain
-	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "443", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	// Block HTTP connections to domain  
-	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	// Block systemd-resolved on port 53 (127.0.0.53)
-	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", "127.0.0.53", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-
-	
-	// Block DNS-over-HTTPS servers - only once
-	if !nb.dohBlocksAdded {
-		dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
-		for _, server := range dohServers {
-			cmd = exec.Command("iptables", "-I", "OUTPUT", "1", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
-			cmd.Run() // Ignore errors
-		}
-		nb.dohBlocksAdded = true
-	}
-	
-	return nil
+func (nb *NetworkBlocker) UnblockIP(ip string) error {
+	return nb.manager.UnblockIP(ip)
 }
 
-func (nb *NetworkBlocker) unblockDNS(domain string) error {
-	// Remove DNS blocking rules
-	cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	// Remove HTTPS/HTTP blocking
-	cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "443", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	cmd = exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	// Remove systemd-resolved blocks
-	cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-	cmd = exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	cmd.Run()
-	
-
-	
-	return nil
+func (nb *NetworkBlocker) UnblockAll() error {
+	return nb.manager.UnblockAll()
 }
 
-func (nb *NetworkBlocker) addToHosts(domain string) error {
-	// Temporarily remove immutable flag
-	nb.UnprotectHostsFile()
-	defer nb.ProtectHostsFile()
-	
-	// Read current hosts file
-	hostsFile := "/etc/hosts"
-	content, err := os.ReadFile(hostsFile)
-	if err != nil {
-		return err
-	}
-	
-	// Check if domain already blocked (check for exact keyphy block)
-	hostsContent := string(content)
-	keyphyBlock := fmt.Sprintf("# Keyphy block %s", domain)
-	if strings.Contains(hostsContent, keyphyBlock) {
-		return nil // Already blocked
-	}
-	
-	// Add blocking entries with unique marker
-	newContent := hostsContent + fmt.Sprintf("\n# Keyphy block %s\n127.0.0.1 %s\n127.0.0.1 www.%s\n0.0.0.0 %s\n0.0.0.0 www.%s\n", domain, domain, domain, domain, domain)
-	
-	return os.WriteFile(hostsFile, []byte(newContent), 0600)
+func (nb *NetworkBlocker) ProtectHostsFile() error {
+	return nb.manager.ProtectHostsFile()
 }
 
-func (nb *NetworkBlocker) removeFromHosts(domain string) error {
-	// Temporarily remove immutable flag
-	nb.UnprotectHostsFile()
-	defer nb.ProtectHostsFile()
-	
-	// Read current hosts file
-	hostsFile := "/etc/hosts"
-	content, err := os.ReadFile(hostsFile)
-	if err != nil {
-		return err
-	}
-	
-	// Remove keyphy block section for this domain
-	lines := strings.Split(string(content), "\n")
-	var newLines []string
-	inKeyphyBlock := false
-	keyphyBlockMarker := fmt.Sprintf("# Keyphy block %s", domain)
-	
-	for _, line := range lines {
-		if line == keyphyBlockMarker {
-			inKeyphyBlock = true
-			continue
-		}
-		if inKeyphyBlock && (strings.Contains(line, domain) || strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0")) {
-			continue // Skip keyphy block lines
-		}
-		if inKeyphyBlock && strings.HasPrefix(line, "#") {
-			inKeyphyBlock = false // End of this block
-		}
-		newLines = append(newLines, line)
-	}
-	
-	newContent := strings.Join(newLines, "\n")
-	return os.WriteFile(hostsFile, []byte(newContent), 0600)
+func (nb *NetworkBlocker) UnprotectHostsFile() error {
+	return nb.manager.UnprotectHostsFile()
 }
 
+// Legacy compatibility methods
 func (nb *NetworkBlocker) MonitorNetworkTraffic() error {
-	// Monitor network connections using netstat or ss
-	cmd := exec.Command("ss", "-tuln")
-	output, err := cmd.Output()
-	if err != nil {
-		return err
-	}
-	
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		// Parse connections and check against blocked domains
-		if nb.shouldBlockConnection(line) {
-			// Block the connection
-			nb.blockConnection(line)
-		}
-	}
-	
-	return nil
-}
-
-func (nb *NetworkBlocker) shouldBlockConnection(connection string) bool {
-	for domain := range nb.blockedDomains {
-		if strings.Contains(connection, domain) {
-			return true
-		}
-	}
-	return false
-}
-
-func (nb *NetworkBlocker) blockConnection(connection string) error {
-	// Parse connection string to extract IP and port
-	fields := strings.Fields(connection)
-	if len(fields) < 5 {
-		return nil // Invalid connection format
-	}
-	
-	// Extract destination IP from connection
-	destAddr := fields[4]
-	if strings.Contains(destAddr, ":") {
-		parts := strings.Split(destAddr, ":")
-		if len(parts) >= 1 {
-			ip := parts[0]
-			// Block this specific IP
-			cmd := exec.Command("iptables", "-I", "OUTPUT", "1", "-d", ip, "-j", "DROP")
-			cmd.Run()
-		}
-	}
+	// Network monitoring handled by platform-specific implementation
 	return nil
 }
 
 func (nb *NetworkBlocker) VerifyHostsFile() error {
-	// Check if blocked domains are still in hosts file
-	hostsFile := "/etc/hosts"
-	content, err := os.ReadFile(hostsFile)
-	if err != nil {
-		return err
-	}
-	
-	hostsContent := string(content)
-	modified := false
-	
-	// Check each blocked domain
-	for domain := range nb.blockedDomains {
-		blockEntry := fmt.Sprintf("127.0.0.1 %s", domain)
-		if !strings.Contains(hostsContent, blockEntry) {
-			// Domain block was removed, restore it
-			if err := nb.addToHosts(domain); err != nil {
-				return fmt.Errorf("failed to restore hosts entry for %s: %v", domain, err)
-			}
-			modified = true
-		}
-	}
-	
-	if modified {
-		// Also restore DNS blocks
-		for domain := range nb.blockedDomains {
-			nb.blockDNS(domain)
-		}
-	}
-	
+	// Hosts file verification handled by platform-specific implementation
 	return nil
-}
-
-func (nb *NetworkBlocker) ProtectHostsFile() error {
-	// Make hosts file immutable to prevent tampering
-	cmd := exec.Command("chattr", "+i", "/etc/hosts")
-	return cmd.Run()
-}
-
-func (nb *NetworkBlocker) UnprotectHostsFile() error {
-	// Remove immutable flag from hosts file
-	cmd := exec.Command("chattr", "-i", "/etc/hosts")
-	return cmd.Run()
-}
-
-func (nb *NetworkBlocker) ruleExists(domain string) bool {
-	// Check if iptables rule already exists for this domain
-	cmd := exec.Command("iptables", "-C", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-	return cmd.Run() == nil
-}
-
-func (nb *NetworkBlocker) UnblockAll() error {
-	// Remove all keyphy-related iptables rules
-	fmt.Println("Removing all iptables rules...")
-	nb.removeAllIptablesRules()
-	
-	// Clear blocked domains map
-	nb.blockedDomains = make(map[string]bool)
-	nb.ipBlocksAdded = false
-	nb.dohBlocksAdded = false
-	
-	// Clean hosts file
-	fmt.Println("Cleaning hosts file...")
-	nb.UnprotectHostsFile()
-	defer nb.ProtectHostsFile()
-	
-	// Remove all keyphy entries from hosts file
-	hostsFile := "/etc/hosts"
-	content, err := os.ReadFile(hostsFile)
-	if err != nil {
-		return err
-	}
-	
-	lines := strings.Split(string(content), "\n")
-	var newLines []string
-	inKeyphyBlock := false
-	
-	for _, line := range lines {
-		if strings.HasPrefix(line, "# Keyphy block") {
-			inKeyphyBlock = true
-			continue
-		}
-		if inKeyphyBlock && (strings.HasPrefix(line, "127.0.0.1") || strings.HasPrefix(line, "0.0.0.0")) {
-			continue
-		}
-		if inKeyphyBlock && line == "" {
-			inKeyphyBlock = false
-		}
-		newLines = append(newLines, line)
-	}
-	
-	newContent := strings.Join(newLines, "\n")
-	if err := os.WriteFile(hostsFile, []byte(newContent), 0600); err != nil {
-		return err
-	}
-	fmt.Println("All network blocking rules removed successfully")
-	return nil
-}
-
-func (nb *NetworkBlocker) removeAllIptablesRules() {
-	
-	// Remove all DoH server blocks
-	dohServers := []string{"1.1.1.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"}
-	for _, server := range dohServers {
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "-d", server, "--dport", "443", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-	}
-	
-	// Remove all string matching rules for blocked domains
-	for domain := range nb.blockedDomains {
-		// Remove DNS rules
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-		// Remove HTTP/HTTPS rules
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "80", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-p", "tcp", "--dport", "443", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-		// Remove systemd-resolved rules
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "udp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-		for {
-			cmd := exec.Command("iptables", "-D", "OUTPUT", "-d", "127.0.0.53", "-p", "tcp", "--dport", "53", "-m", "string", "--string", domain, "--algo", "bm", "-j", "DROP")
-			if cmd.Run() != nil {
-				break
-			}
-		}
-	}
 }

@@ -208,15 +208,17 @@ func NewListCommand() *cobra.Command {
 				fmt.Println("Auth Key: [NOT SET]")
 			}
 			
-			// Show actual service status instead of config flag
-			running, _ := service.GetDaemonStatus()
-			serviceStatus := service.GetServiceStatus()
-			if running {
-				fmt.Println("Service Status: Running")
+			// Show cross-platform service status
+			if sm, err := service.NewServiceManager(); err == nil {
+				if status, err := sm.Status(); err == nil {
+					fmt.Printf("Service Status: %s\n", status)
+				} else {
+					fmt.Println("Service Status: Unknown")
+				}
+				fmt.Printf("Service Config: %s\n", service.GetServiceConfigPath())
 			} else {
-				fmt.Println("Service Status: Stopped")
+				fmt.Println("Service Status: Not Available")
 			}
-			fmt.Printf("Systemd Status: %s", serviceStatus)
 			
 			return nil
 		},
@@ -320,24 +322,62 @@ func NewServiceCommand() *cobra.Command {
 		DisableFlagsInUseLine: true,
 	}
 
-	daemon := service.NewDaemon()
-
 	cmd.AddCommand(
 		&cobra.Command{
-			Use:   "start",
-			Short: "Start keyphy daemon",
+			Use:   "install",
+			Short: "Install keyphy as system service",
 			DisableFlagsInUseLine: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				if os.Geteuid() != 0 {
-					return fmt.Errorf("daemon must be run as root")
+					return fmt.Errorf("service installation requires root privileges")
 				}
-				
-				// Check if daemon is already running
-				if running, _ := service.GetDaemonStatus(); running {
-					return fmt.Errorf("daemon is already running")
+				sm, err := service.NewServiceManager()
+				if err != nil {
+					return err
 				}
-				
-				return service.StartDaemonBackground()
+				if err := sm.Install(); err != nil {
+					return fmt.Errorf("failed to install service: %v", err)
+				}
+				fmt.Printf("Service installed successfully at: %s\n", service.GetServiceConfigPath())
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:   "uninstall",
+			Short: "Uninstall keyphy system service",
+			DisableFlagsInUseLine: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("service uninstallation requires root privileges")
+				}
+				sm, err := service.NewServiceManager()
+				if err != nil {
+					return err
+				}
+				if err := sm.Uninstall(); err != nil {
+					return fmt.Errorf("failed to uninstall service: %v", err)
+				}
+				fmt.Println("Service uninstalled successfully")
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:   "start",
+			Short: "Start keyphy daemon service",
+			DisableFlagsInUseLine: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("service management requires root privileges")
+				}
+				sm, err := service.NewServiceManager()
+				if err != nil {
+					return err
+				}
+				if err := sm.Start(); err != nil {
+					return fmt.Errorf("failed to start service: %v", err)
+				}
+				fmt.Println("Service started successfully")
+				return nil
 			},
 		},
 		&cobra.Command{
@@ -348,64 +388,66 @@ func NewServiceCommand() *cobra.Command {
 				if os.Geteuid() != 0 {
 					return fmt.Errorf("daemon must be run as root")
 				}
-				
-				// Check if another daemon is already running
-				if pid, err := service.ReadPidFileExternal(); err == nil {
-					if service.IsProcessRunningExternal(pid) {
-						return fmt.Errorf("daemon already running with PID %d", pid)
-					}
-					// Clean up stale PID file
-					os.Remove("/var/run/keyphy.pid")
-				}
-				
-				if err := daemon.Start(); err != nil {
+				sm, err := service.NewServiceManager()
+				if err != nil {
 					return err
 				}
-				// Keep daemon running
-				select {}
+				return sm.Run()
 			},
 		},
 		&cobra.Command{
 			Use:   "stop",
-			Short: "Stop keyphy daemon",
+			Short: "Stop keyphy daemon service",
 			DisableFlagsInUseLine: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				if os.Geteuid() != 0 {
-					return fmt.Errorf("stop requires root privileges")
+					return fmt.Errorf("service management requires root privileges")
 				}
-				fmt.Println("Stopping keyphy daemon...")
-				
-				// Try to stop via PID file first
-				if err := service.SendStopSignal(); err != nil {
-					fmt.Printf("PID file method failed: %v\n", err)
-					fmt.Println("Attempting to stop all keyphy daemon processes...")
-					
-					// Fallback: kill all keyphy daemon processes
-					if err := service.StopAllDaemons(); err != nil {
-						return fmt.Errorf("failed to stop daemon processes: %v", err)
-					}
+				sm, err := service.NewServiceManager()
+				if err != nil {
+					return err
 				}
-				
-				fmt.Println("Keyphy daemon stopped successfully")
+				if err := sm.Stop(); err != nil {
+					return fmt.Errorf("failed to stop service: %v", err)
+				}
+				fmt.Println("Service stopped successfully")
 				return nil
 			},
 		},
-
 		&cobra.Command{
-			Use:   "status",
-			Short: "Check daemon status",
+			Use:   "restart",
+			Short: "Restart keyphy daemon service",
 			DisableFlagsInUseLine: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				running, err := service.GetDaemonStatus()
+				if os.Geteuid() != 0 {
+					return fmt.Errorf("service management requires root privileges")
+				}
+				sm, err := service.NewServiceManager()
 				if err != nil {
-					return fmt.Errorf("failed to get daemon status: %v", err)
+					return err
 				}
-				if running {
-					fmt.Println("Daemon status: Running")
-				} else {
-					fmt.Println("Daemon status: Stopped")
+				if err := sm.Restart(); err != nil {
+					return fmt.Errorf("failed to restart service: %v", err)
 				}
-				fmt.Printf("Service status: %s", service.GetServiceStatus())
+				fmt.Println("Service restarted successfully")
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:   "status",
+			Short: "Check service status",
+			DisableFlagsInUseLine: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				sm, err := service.NewServiceManager()
+				if err != nil {
+					return err
+				}
+				status, err := sm.Status()
+				if err != nil {
+					return fmt.Errorf("failed to get service status: %v", err)
+				}
+				fmt.Printf("Service Status: %s\n", status)
+				fmt.Printf("Config Path: %s\n", service.GetServiceConfigPath())
 				return nil
 			},
 		},
