@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 	"os/exec"
+	"github.com/kardianos/service"
 	"github.com/gajzzs/keyphy/internal/blocker"
 	"github.com/gajzzs/keyphy/internal/config"
 	"github.com/gajzzs/keyphy/internal/crypto"
@@ -36,7 +37,11 @@ func NewDaemon() *Daemon {
 	}
 }
 
-func (d *Daemon) Start() error {
+func (d *Daemon) Start(s service.Service) error {
+	return d.startDaemon()
+}
+
+func (d *Daemon) startDaemon() error {
 	if d.running {
 		return fmt.Errorf("daemon already running")
 	}
@@ -74,7 +79,11 @@ func (d *Daemon) Start() error {
 	return nil
 }
 
-func (d *Daemon) Stop() error {
+func (d *Daemon) Stop(s service.Service) error {
+	return d.stopDaemon()
+}
+
+func (d *Daemon) stopDaemon() error {
 	log.Println("Stopping keyphy daemon...")
 	d.cancel()
 	d.running = false
@@ -330,7 +339,7 @@ func (d *Daemon) handleSignals() {
 					continue // Ignore termination signal
 				}
 				log.Println("Auth device verified, shutting down...")
-				d.Stop()
+				d.stopDaemon()
 				os.Exit(0)
 			}
 		}
@@ -391,7 +400,7 @@ func (d *Daemon) selfProtection() {
 			// Restart if killed without auth
 			if !d.running {
 				log.Println("Daemon killed unexpectedly, restarting...")
-				d.Start()
+				d.startDaemon()
 			}
 		}
 	}

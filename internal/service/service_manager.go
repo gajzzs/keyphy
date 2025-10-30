@@ -20,13 +20,12 @@ type program struct {
 
 func (p *program) Start(s service.Service) error {
 	log.Println("Starting keyphy service...")
-	go p.daemon.Start()
-	return nil
+	return p.daemon.Start(s)
 }
 
 func (p *program) Stop(s service.Service) error {
 	log.Println("Stopping keyphy service...")
-	return p.daemon.Stop()
+	return p.daemon.Stop(s)
 }
 
 func NewServiceManager() (*ServiceManager, error) {
