@@ -20,6 +20,7 @@ type Daemon struct {
 	networkBlocker *blocker.NetworkBlocker
 	fileBlocker    *blocker.FileBlocker
 	running        bool
+	blocksActive   bool
 	ctx            context.Context
 	cancel         context.CancelFunc
 }
@@ -52,6 +53,7 @@ func (d *Daemon) Start() error {
 	if err := d.applyBlocks(); err != nil {
 		return fmt.Errorf("failed to apply blocks: %v", err)
 	}
+	d.blocksActive = true
 
 	// Start monitoring goroutines
 	go d.monitorDevices()
@@ -97,6 +99,7 @@ func (d *Daemon) UnlockWithAuth() error {
 	if err := d.removeAllBlocks(); err != nil {
 		return fmt.Errorf("failed to remove blocks: %v", err)
 	}
+	d.blocksActive = false
 	
 	return nil
 }
@@ -110,6 +113,7 @@ func (d *Daemon) LockWithAuth() error {
 	if err := d.applyBlocks(); err != nil {
 		return fmt.Errorf("failed to apply blocks: %v", err)
 	}
+	d.blocksActive = true
 	
 	return nil
 }
@@ -233,6 +237,8 @@ func (d *Daemon) monitorDevices() {
 						// Apply blocks when device is removed
 						if err := d.applyBlocks(); err != nil {
 							log.Printf("Failed to apply blocks after device disconnection: %v", err)
+						} else {
+							d.blocksActive = true
 						}
 					}
 					lastDeviceState = currentDeviceState
@@ -271,6 +277,10 @@ func (d *Daemon) monitorProcesses() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
+			// Only monitor processes if blocks are active
+			if !d.blocksActive {
+				continue
+			}
 			cfg := config.GetConfig()
 			for _, app := range cfg.BlockedApps {
 				if pids, err := d.appBlocker.GetRunningProcesses(app); err == nil {
@@ -302,6 +312,7 @@ func (d *Daemon) handleSignals() {
 					log.Printf("Failed to remove blocks: %v", err)
 				} else {
 					log.Println("Blocks removed successfully")
+					d.blocksActive = false
 				}
 			case syscall.SIGUSR2:
 				log.Println("Received lock signal")
@@ -310,6 +321,7 @@ func (d *Daemon) handleSignals() {
 					log.Printf("Failed to apply blocks: %v", err)
 				} else {
 					log.Println("Blocks applied successfully")
+					d.blocksActive = true
 				}
 			case syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL:
 				// Require auth device for termination
