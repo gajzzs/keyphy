@@ -80,6 +80,13 @@ func SaveConfig() error {
 
 func AddBlockedApp(app string) error {
 	UnprotectConfigFile()
+	// Check for duplicates
+	for _, existing := range config.BlockedApps {
+		if existing == app {
+			fmt.Printf("'%s' is already in blocked applications list\n", app)
+			return nil
+		}
+	}
 	config.BlockedApps = append(config.BlockedApps, app)
 	fmt.Printf("Added '%s' to blocked applications in config\n", app)
 	return SaveConfig()
@@ -88,6 +95,13 @@ func AddBlockedApp(app string) error {
 func AddBlockedAppWithPath(app, path string) error {
 	UnprotectConfigFile()
 	appEntry := fmt.Sprintf("%s:%s", app, path)
+	// Check for duplicates
+	for _, existing := range config.BlockedApps {
+		if existing == appEntry || existing == path {
+			fmt.Printf("'%s' is already in blocked applications list\n", appEntry)
+			return nil
+		}
+	}
 	config.BlockedApps = append(config.BlockedApps, appEntry)
 	fmt.Printf("Added '%s' with path '%s' to blocked applications in config\n", app, path)
 	return SaveConfig()
@@ -113,6 +127,27 @@ func RemoveBlocked(item string) error {
 	config.BlockedWebsites = removeFromSlice(config.BlockedWebsites, item)
 	config.BlockedPaths = removeFromSlice(config.BlockedPaths, item)
 	return SaveConfig()
+}
+
+func CleanDuplicates() error {
+	UnprotectConfigFile()
+	config.BlockedApps = removeDuplicates(config.BlockedApps)
+	config.BlockedWebsites = removeDuplicates(config.BlockedWebsites)
+	config.BlockedPaths = removeDuplicates(config.BlockedPaths)
+	fmt.Println("Removed duplicate entries from config")
+	return SaveConfig()
+}
+
+func removeDuplicates(slice []string) []string {
+	seen := make(map[string]bool)
+	result := []string{}
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func ProtectConfigFile() {

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
-
 )
 
 type AppBlocker struct {
@@ -85,17 +85,26 @@ func (ab *AppBlocker) setupDBusMonitoring(appName string) error {
 
 func (ab *AppBlocker) createBlockingWrapper(appName string) error {
 	var execPath string
+	var displayName string
 	
 	// Check if appName contains custom path (format: "name:path")
 	if strings.Contains(appName, ":") {
 		parts := strings.SplitN(appName, ":", 2)
-		appName = parts[0]
+		displayName = parts[0]
 		execPath = parts[1]
 		if _, err := os.Stat(execPath); err != nil {
 			return fmt.Errorf("custom executable path %s not found", execPath)
 		}
+	} else if strings.HasPrefix(appName, "/") {
+		// Full path provided directly
+		execPath = appName
+		displayName = filepath.Base(appName)
+		if _, err := os.Stat(execPath); err != nil {
+			return fmt.Errorf("executable path %s not found", execPath)
+		}
 	} else {
 		// Find the actual executable path
+		displayName = appName
 		var err error
 		execPath, err = exec.LookPath(appName)
 		if err != nil {
@@ -129,7 +138,7 @@ func (ab *AppBlocker) createBlockingWrapper(appName string) error {
 	blockScript := fmt.Sprintf(`#!/bin/bash
 echo "Access to %s is blocked by Keyphy"
 exit 1
-`, appName)
+`, displayName)
 	
 	// Replace executable with blocking script
 	if err := os.WriteFile(execPath, []byte(blockScript), 0755); err != nil {
@@ -156,22 +165,51 @@ func (ab *AppBlocker) BlockProcessLaunch(pid int) error {
 func (ab *AppBlocker) GetRunningProcesses(appName string) ([]int, error) {
 	var pids []int
 	
-	// Sanitize appName to prevent command injection
-	if strings.ContainsAny(appName, ";|&$`(){}[]<>*?~") {
-		return nil, fmt.Errorf("invalid characters in app name: %s", appName)
+	// Extract actual app name from path if needed
+	searchTerm := appName
+	if strings.Contains(appName, ":") {
+		parts := strings.SplitN(appName, ":", 2)
+		searchTerm = parts[1] // Use the path part
 	}
 	
-	cmd := exec.Command("pgrep", "-f", appName)
-	output, err := cmd.Output()
-	if err != nil {
-		return pids, nil // No processes found
-	}
-	
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
-		var pid int
-		if _, err := fmt.Sscanf(line, "%d", &pid); err == nil {
-			pids = append(pids, pid)
+	// For AppImages and full paths, search by basename too
+	if strings.HasPrefix(searchTerm, "/") {
+		baseName := filepath.Base(searchTerm)
+		// Search for both full path and basename (for AppImages)
+		searchTerms := []string{searchTerm, baseName}
+		if strings.Contains(baseName, "VeraCrypt") {
+			searchTerms = append(searchTerms, "veracrypt") // AppImages often change case
+		}
+		
+		for _, term := range searchTerms {
+			cmd := exec.Command("pgrep", "-f", term)
+			output, err := cmd.Output()
+			if err == nil {
+				lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+				for _, line := range lines {
+					var pid int
+					if _, err := fmt.Sscanf(line, "%d", &pid); err == nil {
+						pids = append(pids, pid)
+					}
+				}
+			}
+		}
+	} else {
+		// For app names, use original logic
+		if strings.ContainsAny(searchTerm, ";|&$`(){}[]<>*?~") {
+			return nil, fmt.Errorf("invalid characters in app name: %s", searchTerm)
+		}
+		cmd := exec.Command("pgrep", "-f", searchTerm)
+		output, err := cmd.Output()
+		if err != nil {
+			return pids, nil
+		}
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, line := range lines {
+			var pid int
+			if _, err := fmt.Sscanf(line, "%d", &pid); err == nil {
+				pids = append(pids, pid)
+			}
 		}
 	}
 	
