@@ -12,16 +12,16 @@ import (
 	"keyphy/internal/service"
 )
 
-func NewBlockCommand() *cobra.Command {
+func NewAddCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "block",
-		Short: "Block apps, websites, or file paths",
+		Use:   "add",
+		Short: "Add apps, websites, or file paths to blocking list",
 		DisableFlagsInUseLine: true,
 	}
 
 	appCmd := &cobra.Command{
 		Use:   "app [application-name]",
-		Short: "Block an application (use executable name, e.g. firefox, chrome, code)",
+		Short: "Add an application to blocking list (use executable name, e.g. firefox, chrome, code)",
 		Args:  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,7 +32,7 @@ func NewBlockCommand() *cobra.Command {
 			customPath, _ := cmd.Flags().GetString("path")
 			appName := args[0]
 			
-			fmt.Printf("Blocking application: %s\n", appName)
+			fmt.Printf("Adding application to blocking list: %s\n", appName)
 			if customPath != "" {
 				fmt.Printf("Using custom path: %s\n", customPath)
 				if err := config.AddBlockedAppWithPath(appName, customPath); err != nil {
@@ -43,7 +43,7 @@ func NewBlockCommand() *cobra.Command {
 					return err
 				}
 			}
-			fmt.Printf("Application '%s' blocked successfully\n", appName)
+			fmt.Printf("Application '%s' added to blocking list successfully\n", appName)
 			return nil
 		},
 	}
@@ -53,35 +53,35 @@ func NewBlockCommand() *cobra.Command {
 		appCmd,
 		&cobra.Command{
 			Use:   "website [domain]",
-			Short: "Block a website (enter domain without www, e.g. youtube.com)",
+			Short: "Add a website to blocking list (enter domain without www, e.g. youtube.com)",
 			Args:  cobra.ExactArgs(1),
 			DisableFlagsInUseLine: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				if !validateDeviceAuth() {
 					return fmt.Errorf("authentication device not connected or invalid")
 				}
-				fmt.Printf("Blocking website: %s\n", args[0])
+				fmt.Printf("Adding website to blocking list: %s\n", args[0])
 				if err := config.AddBlockedWebsite(args[0]); err != nil {
 					return err
 				}
-				fmt.Printf("Website '%s' blocked successfully\n", args[0])
+				fmt.Printf("Website '%s' added to blocking list successfully\n", args[0])
 				return nil
 			},
 		},
 		&cobra.Command{
 			Use:   "path [file-or-folder-path]",
-			Short: "Block file or folder access",
+			Short: "Add file or folder to blocking list",
 			Args:  cobra.ExactArgs(1),
 			DisableFlagsInUseLine: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				if !validateDeviceAuth() {
 					return fmt.Errorf("authentication device not connected or invalid")
 				}
-				fmt.Printf("Blocking path: %s\n", args[0])
+				fmt.Printf("Adding path to blocking list: %s\n", args[0])
 				if err := config.AddBlockedPath(args[0]); err != nil {
 					return err
 				}
-				fmt.Printf("Path '%s' blocked successfully\n", args[0])
+				fmt.Printf("Path '%s' added to blocking list successfully\n", args[0])
 				return nil
 			},
 		},
