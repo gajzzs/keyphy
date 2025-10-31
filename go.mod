@@ -8,6 +8,7 @@ require (
 	github.com/coreos/go-iptables v0.8.0
 	github.com/kardianos/service v1.2.4
 	github.com/manifoldco/promptui v0.9.0
+	github.com/miekg/dns v1.1.68
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/spf13/cobra v1.8.0
 	github.com/vishvananda/netlink v1.3.1
@@ -20,7 +21,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
-	github.com/miekg/dns v1.1.68 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect

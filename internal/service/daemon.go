@@ -101,7 +101,16 @@ func (d *Daemon) stopDaemon() error {
 	}
 
 	// Remove all blocks when stopping
-	return d.removeAllBlocks()
+	if err := d.removeAllBlocks(); err != nil {
+		return err
+	}
+	
+	// Stop network blocker (including DNS system)
+	if err := d.networkBlocker.Stop(); err != nil {
+		log.Printf("Warning: Failed to stop network blocker: %v", err)
+	}
+	
+	return nil
 }
 
 func (d *Daemon) UnlockWithAuth() error {
