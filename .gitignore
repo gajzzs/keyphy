@@ -10,6 +10,15 @@ build/
 # Test binary, built with `go test -c`
 *.test
 
+# Test files
+*_test.go
+test/
+tests/
+testing/
+*.test.go
+test_*.go
+*_test_*.go
+
 # Output of the go coverage tool
 *.out
 
