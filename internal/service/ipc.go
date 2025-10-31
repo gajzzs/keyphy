@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,24 +24,24 @@ func SendUnlockSignal() error {
 		return fmt.Errorf("authentication device not connected or invalid")
 	}
 	
-	pid, err := ReadPidFile()
+	// Use service manager to check status
+	sm, err := NewServiceManager()
 	if err != nil {
-		return fmt.Errorf("daemon not running: %v", err)
+		return fmt.Errorf("failed to create service manager: %v", err)
 	}
 	
-	// Check if process is actually running
-	if !IsProcessRunning(pid) {
-		// Clean up stale PID file
-		os.Remove(GetUniquePidFile())
-		return fmt.Errorf("daemon not running (stale PID file removed)")
-	}
-	
-	process, err := os.FindProcess(pid)
+	// Check if service is running
+	status, err := sm.Status()
 	if err != nil {
-		return fmt.Errorf("failed to find daemon process: %v", err)
+		return fmt.Errorf("failed to get service status: %v", err)
 	}
 	
-	return process.Signal(SIGUSR1)
+	if status != "Running" {
+		return fmt.Errorf("daemon service is not running (status: %s)", status)
+	}
+	
+	// Find keyphy daemon process and send signal
+	return sendSignalToKeyphyDaemon(SIGUSR1)
 }
 
 func SendLockSignal() error {
@@ -49,24 +50,24 @@ func SendLockSignal() error {
 		return fmt.Errorf("authentication device not connected or invalid")
 	}
 	
-	pid, err := ReadPidFile()
+	// Use service manager to check status
+	sm, err := NewServiceManager()
 	if err != nil {
-		return fmt.Errorf("daemon not running: %v", err)
+		return fmt.Errorf("failed to create service manager: %v", err)
 	}
 	
-	// Check if process is actually running
-	if !IsProcessRunning(pid) {
-		// Clean up stale PID file
-		os.Remove(GetUniquePidFile())
-		return fmt.Errorf("daemon not running (stale PID file removed)")
-	}
-	
-	process, err := os.FindProcess(pid)
+	// Check if service is running
+	status, err := sm.Status()
 	if err != nil {
-		return fmt.Errorf("failed to find daemon process: %v", err)
+		return fmt.Errorf("failed to get service status: %v", err)
 	}
 	
-	return process.Signal(SIGUSR2)
+	if status != "Running" {
+		return fmt.Errorf("daemon service is not running (status: %s)", status)
+	}
+	
+	// Find keyphy daemon process and send signal
+	return sendSignalToKeyphyDaemon(SIGUSR2)
 }
 
 func validateDeviceBeforeSignal() bool {
@@ -103,17 +104,23 @@ func IsProcessRunning(pid int) bool {
 	return err == nil
 }
 
-func SendStopSignal() error {
-	pid, err := ReadPidFile()
+// sendSignalToKeyphyDaemon finds the running keyphy daemon and sends a signal
+func sendSignalToKeyphyDaemon(sig syscall.Signal) error {
+	// Use ps to find keyphy daemon process
+	cmd := exec.Command("pgrep", "-f", "keyphy service run-daemon")
+	output, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("daemon not running: %v", err)
+		return fmt.Errorf("keyphy daemon not found: %v", err)
 	}
 	
-	// Check if process is actually running
-	if !IsProcessRunning(pid) {
-		// Clean up stale PID file
-		os.Remove(GetUniquePidFile())
-		return fmt.Errorf("daemon not running (stale PID file removed)")
+	pidStr := strings.TrimSpace(string(output))
+	if pidStr == "" {
+		return fmt.Errorf("keyphy daemon not running")
+	}
+	
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return fmt.Errorf("invalid daemon PID: %v", err)
 	}
 	
 	process, err := os.FindProcess(pid)
@@ -121,40 +128,11 @@ func SendStopSignal() error {
 		return fmt.Errorf("failed to find daemon process: %v", err)
 	}
 	
-	// Send SIGTERM to gracefully stop daemon
-	return process.Signal(syscall.SIGTERM)
+	return process.Signal(sig)
 }
 
+// Public functions for external access
 func ReadPidFile() (int, error) {
-	pidFile := GetUniquePidFile()
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		return 0, err
-	}
-	
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		return 0, err
-	}
-	
-	return pid, nil
-}
-
-func GetUniquePidFile() string {
-	basePid := "/var/run/keyphy.pid"
-	if _, err := os.Stat(basePid); os.IsNotExist(err) {
-		return basePid
-	}
-	
-	// Check if it's a directory
-	if info, err := os.Stat(basePid); err == nil && info.IsDir() {
-		// Directory exists, create unique PID file name
-		for i := 1; i < 100; i++ {
-			uniqueName := fmt.Sprintf("/var/run/keyphy_%d.pid", i)
-			if _, err := os.Stat(uniqueName); os.IsNotExist(err) {
-				return uniqueName
-			}
-		}
-	}
-	return basePid
+	// Legacy function kept for compatibility
+	return 0, fmt.Errorf("PID file access deprecated - use service package")
 }

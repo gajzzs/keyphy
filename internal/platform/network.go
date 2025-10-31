@@ -1,14 +1,11 @@
 package platform
 
-// NetworkManager provides cross-platform network blocking
+// NetworkManager provides cross-platform IP blocking only
+// Domain blocking is handled by DNS system
 type NetworkManager interface {
-	BlockDomain(domain string) error
-	UnblockDomain(domain string) error
 	BlockIP(ip string) error
 	UnblockIP(ip string) error
-	UnblockAll() error
-	ProtectHostsFile() error
-	UnprotectHostsFile() error
+	UnblockAllIPs() error
 }
 
 // NewNetworkManager creates a platform-specific network manager

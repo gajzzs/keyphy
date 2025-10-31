@@ -1,6 +1,7 @@
 package blocker
 
 import (
+	"fmt"
 	"github.com/gajzzs/keyphy/internal/dns"
 	"github.com/gajzzs/keyphy/internal/platform"
 )
@@ -37,25 +38,23 @@ func (nb *NetworkBlocker) StartDNSSystem() error {
 }
 
 func (nb *NetworkBlocker) BlockWebsite(domain string) error {
-	// Use DNS blocking if available (more secure)
+	// Use DNS blocking (primary method)
 	if nb.usingDNS && nb.dnsManager != nil {
 		nb.dnsManager.BlockDomain(domain)
 		return nil
 	}
-	
-	// Fallback to platform manager (hosts file + iptables/pfctl)
-	return nb.manager.BlockDomain(domain)
+	// No fallback - DNS system is required for domain blocking
+	return fmt.Errorf("DNS system not available for domain blocking")
 }
 
 func (nb *NetworkBlocker) UnblockWebsite(domain string) error {
-	// Use DNS unblocking if available
+	// Use DNS unblocking (primary method)
 	if nb.usingDNS && nb.dnsManager != nil {
 		nb.dnsManager.UnblockDomain(domain)
 		return nil
 	}
-	
-	// Fallback to platform manager
-	return nb.manager.UnblockDomain(domain)
+	// No fallback - DNS system handles all domain blocking
+	return nil
 }
 
 func (nb *NetworkBlocker) BlockIP(ip string) error {
@@ -67,22 +66,16 @@ func (nb *NetworkBlocker) UnblockIP(ip string) error {
 }
 
 func (nb *NetworkBlocker) UnblockAll() error {
-	// Unblock all DNS domains if using DNS
+	// Unblock all DNS domains
 	if nb.usingDNS && nb.dnsManager != nil {
 		nb.dnsManager.UnblockAll()
 	}
 	
-	// Also unblock platform manager
-	return nb.manager.UnblockAll()
+	// Unblock all IPs from platform manager
+	return nb.manager.UnblockAllIPs()
 }
 
-func (nb *NetworkBlocker) ProtectHostsFile() error {
-	return nb.manager.ProtectHostsFile()
-}
-
-func (nb *NetworkBlocker) UnprotectHostsFile() error {
-	return nb.manager.UnprotectHostsFile()
-}
+// DNS system handles all domain blocking - no platform manager methods needed
 
 // Stop DNS system when network blocker is stopped
 func (nb *NetworkBlocker) Stop() error {
@@ -97,13 +90,4 @@ func (nb *NetworkBlocker) IsUsingDNS() bool {
 	return nb.usingDNS
 }
 
-// Legacy compatibility methods
-func (nb *NetworkBlocker) MonitorNetworkTraffic() error {
-	// Network monitoring handled by DNS system or platform-specific implementation
-	return nil
-}
-
-func (nb *NetworkBlocker) VerifyHostsFile() error {
-	// Hosts file verification handled by DNS system or platform-specific implementation
-	return nil
-}
+// Network monitoring handled by DNS system

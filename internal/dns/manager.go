@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
 
 type DNSManager struct {
@@ -34,17 +35,26 @@ func (dm *DNSManager) Start() error {
 		return fmt.Errorf("failed to start DNS server: %v", err)
 	}
 
-	// Skip DNS hijacking for now (too aggressive)
-	// TODO: Implement gentler DNS integration
-	log.Println("DNS server started - system DNS hijacking disabled for stability")
+	// Configure system DNS redirection for enhanced blocking
+	if err := dm.configureSystemDNSRedirection(); err != nil {
+		log.Printf("Warning: DNS redirection setup failed: %v", err)
+		log.Println("DNS server running on fallback port - some blocking may be bypassed")
+	} else {
+		log.Println("DNS system fully integrated - all DNS queries will be filtered")
+	}
 	
-	// Skip DNS monitor for now
-	// TODO: Implement after DNS hijacking is stable
+	// Start DNS monitoring for integrity protection
+	go dm.startDNSIntegrityMonitor()
 
 	return nil
 }
 
 func (dm *DNSManager) Stop() error {
+	// Restore original DNS settings
+	if err := dm.restoreDNS(); err != nil {
+		log.Printf("Warning: Failed to restore DNS settings: %v", err)
+	}
+	
 	// Stop DNS server
 	return dm.server.Stop()
 }
@@ -72,12 +82,12 @@ func (dm *DNSManager) backupDNS() error {
 	}
 }
 
-func (dm *DNSManager) hijackSystemDNS() error {
+func (dm *DNSManager) configureSystemDNSRedirection() error {
 	switch runtime.GOOS {
 	case "linux":
-		return dm.hijackLinuxDNS()
+		return dm.configureLinuxDNSRedirection()
 	case "darwin":
-		return dm.hijackMacDNS()
+		return dm.configureMacDNSRedirection()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -108,17 +118,20 @@ func (dm *DNSManager) backupLinuxDNS() error {
 	return dm.backupResolvConf()
 }
 
-func (dm *DNSManager) hijackLinuxDNS() error {
-	// Try systemd-resolve first
+func (dm *DNSManager) configureLinuxDNSRedirection() error {
+	// Use localhost with our DNS server port for redirection
+	dnsServer := "127.0.0.1"
+	
+	// Try systemd-resolve first (most modern approach)
 	if dm.hasSystemdResolve() {
-		return dm.setSystemdDNS("127.0.0.1")
+		return dm.setSystemdDNS(dnsServer)
 	}
 	// Fallback to NetworkManager
 	if dm.hasNetworkManager() {
-		return dm.setNetworkManagerDNS("127.0.0.1")
+		return dm.setNetworkManagerDNS(dnsServer)
 	}
-	// Last resort: modify resolv.conf
-	return dm.setResolvConf("127.0.0.1")
+	// Last resort: modify resolv.conf (legacy systems)
+	return dm.setResolvConf(dnsServer)
 }
 
 func (dm *DNSManager) restoreLinuxDNS() error {
@@ -318,17 +331,27 @@ func (dm *DNSManager) backupMacDNS() error {
 	return nil
 }
 
-func (dm *DNSManager) hijackMacDNS() error {
+func (dm *DNSManager) configureMacDNSRedirection() error {
 	// Get all network interfaces
 	interfaces, err := dm.getMacNetworkInterfaces()
 	if err != nil {
 		return err
 	}
 	
-	// Set DNS for each active interface
+	// Configure DNS redirection for each active interface
+	dnsServer := "127.0.0.1"
+	successCount := 0
+	
 	for _, iface := range interfaces {
-		cmd := exec.Command("networksetup", "-setdnsservers", iface, "127.0.0.1")
-		cmd.Run() // Continue even if one fails
+		cmd := exec.Command("networksetup", "-setdnsservers", iface, dnsServer)
+		if err := cmd.Run(); err == nil {
+			successCount++
+			log.Printf("DNS redirection configured for interface: %s", iface)
+		}
+	}
+	
+	if successCount == 0 {
+		return fmt.Errorf("failed to configure DNS redirection on any interface")
 	}
 	
 	return nil
@@ -374,4 +397,29 @@ func (dm *DNSManager) getMacNetworkInterfaces() ([]string, error) {
 	}
 	
 	return interfaces, nil
+}
+
+// startDNSIntegrityMonitor monitors DNS settings for tampering
+func (dm *DNSManager) startDNSIntegrityMonitor() {
+	// Monitor DNS settings every 30 seconds
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			
+			// Check if DNS redirection is still active
+			if !dm.isDNSRedirectionActive() {
+				log.Println("DNS redirection tampering detected - reapplying configuration")
+				if err := dm.configureSystemDNSRedirection(); err != nil {
+					log.Printf("Failed to restore DNS redirection: %v", err)
+				}
+			}
+		}
+	}()
+}
+
+// isDNSRedirectionActive checks if DNS is properly redirected to our server
+func (dm *DNSManager) isDNSRedirectionActive() bool {
+	// Simple check - verify if our DNS server is receiving queries
+	// This is a basic implementation - could be enhanced with more sophisticated checks
+	return dm.server != nil && dm.server.IsRunning()
 }

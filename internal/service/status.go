@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -15,8 +14,6 @@ func GetDaemonStatus() (bool, error) {
 		if IsProcessRunning(pid) {
 			return true, nil
 		}
-		// Clean up stale PID file
-		os.Remove(GetUniquePidFile())
 	}
 	
 	// Fallback: check for running processes using gopsutil
@@ -48,34 +45,9 @@ func GetServiceStatus() string {
 		return "inactive"
 	}
 	return string(output)
+
 }
 
-func CreatePidFile() error {
-	pidFile := GetUniquePidFile()
-	pid := os.Getpid()
-	data := fmt.Sprintf("%d\n", pid)
-	
-	// Ensure /var/run directory exists and is writable
-	if err := os.MkdirAll("/var/run", 0755); err != nil {
-		return fmt.Errorf("failed to create /var/run directory: %v", err)
-	}
-	
-	if err := os.WriteFile(pidFile, []byte(data), 0600); err != nil {
-		return fmt.Errorf("failed to write PID file: %v", err)
-	}
-	
-	return nil
-}
-
-
-
-func RemovePidFile() error {
-	pidFile := GetUniquePidFile()
-	if _, err := os.Stat(pidFile); os.IsNotExist(err) {
-		return nil // File doesn't exist, nothing to remove
-	}
-	return os.Remove(pidFile)
-}
 
 func StopAllDaemons() error {
 	// Kill all keyphy daemon processes using gopsutil
@@ -98,35 +70,12 @@ func StopAllDaemons() error {
 		}
 	}
 	
-	// Clean up PID file
-	RemovePidFile()
+	// PID file cleanup handled by service package
 	
 	return nil
 }
 
-func StartDaemonBackground() error {
-	fmt.Println("Starting keyphy daemon...")
-	
-	// Fork process to run in background
-	cmd := exec.Command(os.Args[0], "service", "run-daemon")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Stdin = nil
-	
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start daemon: %v", err)
-	}
-	
-	fmt.Println("Keyphy daemon started successfully")
-	return nil
-}
 
-// External access functions for other packages
-func ReadPidFileExternal() (int, error) {
-	return ReadPidFile()
-}
 
-func IsProcessRunningExternal(pid int) bool {
-	return IsProcessRunning(pid)
-}
+
 

@@ -88,6 +88,23 @@ func NewAddCommand() *cobra.Command {
 				return nil
 			},
 		},
+		&cobra.Command{
+			Use:   "ip [ip-address]",
+			Short: "Add IP address to blocking list (e.g. 142.250.194.238)",
+			Args:  cobra.ExactArgs(1),
+			DisableFlagsInUseLine: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if !validateDeviceAuth() {
+					return fmt.Errorf("authentication device not connected or invalid")
+				}
+				fmt.Printf("Adding IP address to blocking list: %s\n", args[0])
+				if err := config.AddBlockedIP(args[0]); err != nil {
+					return err
+				}
+				fmt.Printf("IP address '%s' added to blocking list successfully\n", args[0])
+				return nil
+			},
+		},
 	)
 
 	return cmd
@@ -170,11 +187,18 @@ func performReset() error {
 				}
 			}
 			
-			// Remove all blocking rules
+			// Remove all blocking rules and stop DNS system
 			fmt.Println("Removing all blocking rules...")
 			networkBlocker := blocker.NewNetworkBlocker()
 			if err := networkBlocker.UnblockAll(); err != nil {
 				fmt.Printf("Warning: Failed to remove network rules: %v\n", err)
+			}
+			
+			// Stop DNS system to restore normal DNS
+			if err := networkBlocker.Stop(); err != nil {
+				fmt.Printf("Warning: Failed to stop DNS system: %v\n", err)
+			} else {
+				fmt.Println("DNS system stopped and normal DNS restored")
 			}
 			
 			// Restore all app executables
@@ -237,6 +261,11 @@ func NewListCommand() *cobra.Command {
 			fmt.Println("\nBlocked Paths:")
 			for _, path := range cfg.BlockedPaths {
 				fmt.Printf("  - %s\n", path)
+			}
+			
+			fmt.Println("\nBlocked IPs:")
+			for _, ip := range cfg.BlockedIPs {
+				fmt.Printf("  - %s\n", ip)
 			}
 			
 			fmt.Printf("\nAuth Device: %s\n", cfg.AuthDevice)

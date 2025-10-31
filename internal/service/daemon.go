@@ -57,10 +57,15 @@ func (d *Daemon) startDaemon() error {
 		log.Printf("Warning: Could not enable process protection: %v", err)
 	}
 
-	// Start DNS system for enhanced network blocking
-	if err := d.networkBlocker.StartDNSSystem(); err != nil {
-		log.Printf("Warning: DNS system failed to start: %v", err)
-		log.Println("Falling back to platform-specific network blocking")
+	// Only start DNS system if there are websites to block
+	cfg := config.GetConfig()
+	if len(cfg.BlockedWebsites) > 0 {
+		if err := d.networkBlocker.StartDNSSystem(); err != nil {
+			log.Printf("Warning: DNS system failed to start: %v", err)
+			log.Println("Falling back to platform-specific network blocking")
+		}
+	} else {
+		log.Println("No websites to block - DNS system not started")
 	}
 	
 	// Apply initial blocks
@@ -79,12 +84,7 @@ func (d *Daemon) startDaemon() error {
 	go d.handleSignals()
 	go d.selfProtection()
 
-	// Create PID file
-	if err := CreatePidFile(); err != nil {
-		log.Printf("Warning: Could not create PID file: %v", err)
-	} else {
-		log.Printf("PID file created: /var/run/keyphy.pid (PID: %d)", os.Getpid())
-	}
+	// PID file managed by service package
 
 	log.Println("Keyphy daemon started successfully")
 	return nil
@@ -98,13 +98,6 @@ func (d *Daemon) stopDaemon() error {
 	log.Println("Stopping keyphy daemon...")
 	d.cancel()
 	d.running = false
-
-	// Remove PID file
-	if err := RemovePidFile(); err != nil {
-		log.Printf("Warning: Failed to remove PID file: %v", err)
-	} else {
-		log.Println("PID file removed successfully")
-	}
 
 	// Remove all blocks when stopping
 	if err := d.removeAllBlocks(); err != nil {
@@ -180,13 +173,22 @@ func (d *Daemon) applyBlocks() error {
 		}
 	}
 
-	// Block websites
-	for _, website := range cfg.BlockedWebsites {
-		log.Printf("Blocking website: %s", website)
-		if err := d.networkBlocker.BlockWebsite(website); err != nil {
-			log.Printf("Failed to block website %s: %v", website, err)
-		} else {
-			log.Printf("Successfully blocked website: %s", website)
+	// Block websites - start DNS system if needed
+	if len(cfg.BlockedWebsites) > 0 {
+		// Ensure DNS system is running
+		if !d.networkBlocker.IsUsingDNS() {
+			if err := d.networkBlocker.StartDNSSystem(); err != nil {
+				log.Printf("Warning: DNS system failed to start: %v", err)
+			}
+		}
+		
+		for _, website := range cfg.BlockedWebsites {
+			log.Printf("Blocking website: %s", website)
+			if err := d.networkBlocker.BlockWebsite(website); err != nil {
+				log.Printf("Failed to block website %s: %v", website, err)
+			} else {
+				log.Printf("Successfully blocked website: %s", website)
+			}
 		}
 	}
 
@@ -199,6 +201,16 @@ func (d *Daemon) applyBlocks() error {
 			log.Printf("Successfully blocked path: %s", path)
 		}
 	}
+	
+	// Block IP addresses
+	for _, ip := range cfg.BlockedIPs {
+		log.Printf("Blocking IP: %s", ip)
+		if err := d.networkBlocker.BlockIP(ip); err != nil {
+			log.Printf("Failed to block IP %s: %v", ip, err)
+		} else {
+			log.Printf("Successfully blocked IP: %s", ip)
+		}
+	}
 
 	log.Println("All blocking rules applied successfully")
 	return nil
@@ -209,11 +221,7 @@ func (d *Daemon) removeAllBlocks() error {
 
 	log.Println("Removing all blocking rules and restoring system state...")
 	
-	// Restore hosts file to clean state
-	log.Println("Restoring /etc/hosts file...")
-	if err := d.networkBlocker.UnprotectHostsFile(); err != nil {
-		log.Printf("Warning: Failed to unprotect hosts file: %v", err)
-	}
+	// DNS system handles restoration automatically
 	
 	// Unblock websites (removes hosts entries and iptables rules)
 	for _, website := range cfg.BlockedWebsites {
@@ -247,6 +255,16 @@ func (d *Daemon) removeAllBlocks() error {
 			log.Printf("Failed to unblock path %s: %v", path, err)
 		} else {
 			log.Printf("Successfully unblocked path: %s", path)
+		}
+	}
+	
+	// Unblock IP addresses
+	for _, ip := range cfg.BlockedIPs {
+		log.Printf("Unblocking IP: %s", ip)
+		if err := d.networkBlocker.UnblockIP(ip); err != nil {
+			log.Printf("Failed to unblock IP %s: %v", ip, err)
+		} else {
+			log.Printf("Successfully unblocked IP: %s", ip)
 		}
 	}
 
@@ -298,13 +316,7 @@ func (d *Daemon) monitorNetwork() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := d.networkBlocker.MonitorNetworkTraffic(); err != nil {
-				log.Printf("Network monitoring error: %v", err)
-			}
-			// Monitor hosts file integrity
-			if err := d.networkBlocker.VerifyHostsFile(); err != nil {
-				log.Printf("Hosts file verification failed: %v", err)
-			}
+			// Network monitoring handled by DNS system
 		}
 	}
 }

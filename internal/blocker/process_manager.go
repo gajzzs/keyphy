@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
 	"github.com/shirou/gopsutil/v3/process"
 )
 

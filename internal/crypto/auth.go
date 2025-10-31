@@ -8,6 +8,9 @@ import (
 )
 
 func GenerateDeviceKey(deviceUUID, deviceName string) string {
+	if deviceUUID == "" || deviceName == "" {
+		return ""
+	}
 	// Combine UUID and name for stronger key generation
 	combined := fmt.Sprintf("%s:%s", deviceUUID, deviceName)
 	

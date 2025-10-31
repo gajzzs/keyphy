@@ -45,11 +45,12 @@ func NewServiceManager() (*ServiceManager, error) {
 		Executable:  execPath,
 		Arguments:   []string{"service", "run-daemon"},
 		Option: service.KeyValue{
-			"RunAtLoad": true,
+			"RunAtLoad": false, // Don't auto-start
 			"KeepAlive": true,
 		},
 	}
 
+	// Create daemon instance but don't start it
 	daemon := NewDaemon()
 	prg := &program{daemon: daemon}
 	
@@ -101,11 +102,14 @@ func (sm *ServiceManager) Stop() error {
 		return fmt.Errorf("authentication device required to stop service")
 	}
 	
-	// Try direct launchctl commands first to handle conflicts
-	if err := sm.stopWithLaunchctl(); err == nil {
-		return nil
+	// Stop DNS system first
+	if sm.daemon != nil && sm.daemon.networkBlocker != nil {
+		if err := sm.daemon.networkBlocker.Stop(); err != nil {
+			log.Printf("Warning: Failed to stop DNS system: %v", err)
+		}
 	}
 	
+	// Stop service using service package (handles PID automatically)
 	return sm.service.Stop()
 }
 
@@ -116,7 +120,9 @@ func (sm *ServiceManager) Restart() error {
 	}
 	
 	// Stop first, then start
-	sm.Stop()
+	if err := sm.Stop(); err != nil {
+		return fmt.Errorf("failed to stop service: %v", err)
+	}
 	return sm.Start()
 }
 
@@ -192,12 +198,7 @@ func (sm *ServiceManager) stopWithLaunchctl() error {
 		cmd.Run() // Ignore errors, just try to clean up
 	}
 	
-	// Kill processes safely using PID file
-	if pid, err := ReadPidFile(); err == nil {
-		if process, err := os.FindProcess(pid); err == nil {
-			process.Kill()
-		}
-	}
+	// Process management handled by service package
 	
 	return nil
 }

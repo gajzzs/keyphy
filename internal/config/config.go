@@ -12,6 +12,7 @@ type Config struct {
 	BlockedApps     []string `json:"blocked_apps"`
 	BlockedWebsites []string `json:"blocked_websites"`
 	BlockedPaths    []string `json:"blocked_paths"`
+	BlockedIPs      []string `json:"blocked_ips"`
 	AuthDevice      string   `json:"auth_device"`
 	AuthKey         string   `json:"auth_key"`
 	AuthDeviceName  string   `json:"auth_device_name"`
@@ -53,6 +54,7 @@ func InitConfig() error {
 		BlockedApps:     []string{},
 		BlockedWebsites: []string{},
 		BlockedPaths:    []string{},
+		BlockedIPs:      []string{},
 	}
 
 	if _, err := os.Stat(ConfigFile); err == nil {
@@ -140,11 +142,26 @@ func AddBlockedPath(path string) error {
 	return SaveConfig()
 }
 
+func AddBlockedIP(ip string) error {
+	UnprotectConfigFile()
+	// Check for duplicates
+	for _, existing := range config.BlockedIPs {
+		if existing == ip {
+			fmt.Printf("'%s' is already in blocked IPs list\n", ip)
+			return nil
+		}
+	}
+	config.BlockedIPs = append(config.BlockedIPs, ip)
+	fmt.Printf("Added '%s' to blocked IPs in config\n", ip)
+	return SaveConfig()
+}
+
 func RemoveBlocked(item string) error {
 	UnprotectConfigFile()
 	config.BlockedApps = removeFromSlice(config.BlockedApps, item)
 	config.BlockedWebsites = removeFromSlice(config.BlockedWebsites, item)
 	config.BlockedPaths = removeFromSlice(config.BlockedPaths, item)
+	config.BlockedIPs = removeFromSlice(config.BlockedIPs, item)
 	return SaveConfig()
 }
 
@@ -153,6 +170,7 @@ func CleanDuplicates() error {
 	config.BlockedApps = removeDuplicates(config.BlockedApps)
 	config.BlockedWebsites = removeDuplicates(config.BlockedWebsites)
 	config.BlockedPaths = removeDuplicates(config.BlockedPaths)
+	config.BlockedIPs = removeDuplicates(config.BlockedIPs)
 	fmt.Println("Removed duplicate entries from config")
 	return SaveConfig()
 }
