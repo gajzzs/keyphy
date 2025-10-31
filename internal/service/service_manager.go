@@ -193,7 +193,7 @@ func (sm *ServiceManager) stopWithLaunchctl() error {
 	}
 	
 	// Kill processes safely using PID file
-	if pid, err := readPidFile(); err == nil {
+	if pid, err := ReadPidFile(); err == nil {
 		if process, err := os.FindProcess(pid); err == nil {
 			process.Kill()
 		}

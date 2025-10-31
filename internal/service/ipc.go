@@ -23,13 +23,13 @@ func SendUnlockSignal() error {
 		return fmt.Errorf("authentication device not connected or invalid")
 	}
 	
-	pid, err := readPidFile()
+	pid, err := ReadPidFile()
 	if err != nil {
 		return fmt.Errorf("daemon not running: %v", err)
 	}
 	
 	// Check if process is actually running
-	if !isProcessRunning(pid) {
+	if !IsProcessRunning(pid) {
 		// Clean up stale PID file
 		os.Remove(GetUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
@@ -49,13 +49,13 @@ func SendLockSignal() error {
 		return fmt.Errorf("authentication device not connected or invalid")
 	}
 	
-	pid, err := readPidFile()
+	pid, err := ReadPidFile()
 	if err != nil {
 		return fmt.Errorf("daemon not running: %v", err)
 	}
 	
 	// Check if process is actually running
-	if !isProcessRunning(pid) {
+	if !IsProcessRunning(pid) {
 		// Clean up stale PID file
 		os.Remove(GetUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
@@ -92,7 +92,7 @@ func validateDeviceBeforeSignal() bool {
 	return false
 }
 
-func isProcessRunning(pid int) bool {
+func IsProcessRunning(pid int) bool {
 	// Send signal 0 to check if process exists
 	process, err := os.FindProcess(pid)
 	if err != nil {
@@ -104,13 +104,13 @@ func isProcessRunning(pid int) bool {
 }
 
 func SendStopSignal() error {
-	pid, err := readPidFile()
+	pid, err := ReadPidFile()
 	if err != nil {
 		return fmt.Errorf("daemon not running: %v", err)
 	}
 	
 	// Check if process is actually running
-	if !isProcessRunning(pid) {
+	if !IsProcessRunning(pid) {
 		// Clean up stale PID file
 		os.Remove(GetUniquePidFile())
 		return fmt.Errorf("daemon not running (stale PID file removed)")
@@ -125,7 +125,7 @@ func SendStopSignal() error {
 	return process.Signal(syscall.SIGTERM)
 }
 
-func readPidFile() (int, error) {
+func ReadPidFile() (int, error) {
 	pidFile := GetUniquePidFile()
 	data, err := os.ReadFile(pidFile)
 	if err != nil {

@@ -57,6 +57,12 @@ func (d *Daemon) startDaemon() error {
 		log.Printf("Warning: Could not enable process protection: %v", err)
 	}
 
+	// Start DNS system for enhanced network blocking
+	if err := d.networkBlocker.StartDNSSystem(); err != nil {
+		log.Printf("Warning: DNS system failed to start: %v", err)
+		log.Println("Falling back to platform-specific network blocking")
+	}
+	
 	// Apply initial blocks
 	if err := d.applyBlocks(); err != nil {
 		return fmt.Errorf("failed to apply blocks: %v", err)

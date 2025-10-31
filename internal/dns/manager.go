@@ -34,27 +34,17 @@ func (dm *DNSManager) Start() error {
 		return fmt.Errorf("failed to start DNS server: %v", err)
 	}
 
-	// Hijack system DNS
-	if err := dm.hijackSystemDNS(); err != nil {
-		dm.server.Stop()
-		return fmt.Errorf("failed to hijack DNS: %v", err)
-	}
-
-	// Start DNS monitor
-	if err := dm.monitor.Start(); err != nil {
-		log.Printf("Warning: Failed to start DNS monitor: %v", err)
-	}
+	// Skip DNS hijacking for now (too aggressive)
+	// TODO: Implement gentler DNS integration
+	log.Println("DNS server started - system DNS hijacking disabled for stability")
+	
+	// Skip DNS monitor for now
+	// TODO: Implement after DNS hijacking is stable
 
 	return nil
 }
 
 func (dm *DNSManager) Stop() error {
-	// Stop DNS monitor
-	dm.monitor.Stop()
-	
-	// Restore original DNS
-	dm.restoreDNS()
-	
 	// Stop DNS server
 	return dm.server.Stop()
 }

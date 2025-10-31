@@ -14,23 +14,31 @@ type NetworkBlocker struct {
 }
 
 func NewNetworkBlocker() *NetworkBlocker {
-	nb := &NetworkBlocker{
+	return &NetworkBlocker{
 		manager:    platform.NewNetworkManager(),
-		dnsManager: dns.NewDNSManager(),
+		dnsManager: nil, // Only initialize in daemon
 		usingDNS:   false,
 	}
-	
-	// Try to start DNS system for enhanced security
-	if err := nb.dnsManager.Start(); err == nil {
-		nb.usingDNS = true
+}
+
+// StartDNSSystem initializes and starts DNS system (daemon only)
+func (nb *NetworkBlocker) StartDNSSystem() error {
+	if nb.dnsManager != nil {
+		return nil // Already started
 	}
 	
-	return nb
+	nb.dnsManager = dns.NewDNSManager()
+	if err := nb.dnsManager.Start(); err != nil {
+		return err
+	}
+	
+	nb.usingDNS = true
+	return nil
 }
 
 func (nb *NetworkBlocker) BlockWebsite(domain string) error {
 	// Use DNS blocking if available (more secure)
-	if nb.usingDNS {
+	if nb.usingDNS && nb.dnsManager != nil {
 		nb.dnsManager.BlockDomain(domain)
 		return nil
 	}
@@ -41,7 +49,7 @@ func (nb *NetworkBlocker) BlockWebsite(domain string) error {
 
 func (nb *NetworkBlocker) UnblockWebsite(domain string) error {
 	// Use DNS unblocking if available
-	if nb.usingDNS {
+	if nb.usingDNS && nb.dnsManager != nil {
 		nb.dnsManager.UnblockDomain(domain)
 		return nil
 	}
@@ -60,7 +68,7 @@ func (nb *NetworkBlocker) UnblockIP(ip string) error {
 
 func (nb *NetworkBlocker) UnblockAll() error {
 	// Unblock all DNS domains if using DNS
-	if nb.usingDNS {
+	if nb.usingDNS && nb.dnsManager != nil {
 		nb.dnsManager.UnblockAll()
 	}
 	
@@ -78,7 +86,7 @@ func (nb *NetworkBlocker) UnprotectHostsFile() error {
 
 // Stop DNS system when network blocker is stopped
 func (nb *NetworkBlocker) Stop() error {
-	if nb.usingDNS {
+	if nb.usingDNS && nb.dnsManager != nil {
 		return nb.dnsManager.Stop()
 	}
 	return nil

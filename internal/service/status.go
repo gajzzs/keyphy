@@ -11,12 +11,12 @@ import (
 
 func GetDaemonStatus() (bool, error) {
 	// First check PID file method
-	if pid, err := readPidFile(); err == nil {
-		if isProcessRunning(pid) {
+	if pid, err := ReadPidFile(); err == nil {
+		if IsProcessRunning(pid) {
 			return true, nil
 		}
 		// Clean up stale PID file
-		os.Remove("/var/run/keyphy.pid")
+		os.Remove(GetUniquePidFile())
 	}
 	
 	// Fallback: check for running processes using gopsutil
@@ -123,10 +123,10 @@ func StartDaemonBackground() error {
 
 // External access functions for other packages
 func ReadPidFileExternal() (int, error) {
-	return readPidFile()
+	return ReadPidFile()
 }
 
 func IsProcessRunningExternal(pid int) bool {
-	return isProcessRunning(pid)
+	return IsProcessRunning(pid)
 }
 

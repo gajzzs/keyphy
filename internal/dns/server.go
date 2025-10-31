@@ -34,8 +34,8 @@ func (ds *DNSServer) Start() error {
 	mux := dns.NewServeMux()
 	mux.HandleFunc(".", ds.handleDNSRequest)
 
-	// Try ports in order: 53, 5353, 6666
-	ports := []string{":53", ":5353", ":6666"}
+	// Try ports in order: 6666, 5353 (avoid 53 for now)
+	ports := []string{":6666", ":5353"}
 	
 	for _, port := range ports {
 		ds.server = &dns.Server{
