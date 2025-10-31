@@ -70,15 +70,15 @@ func (dm *DNSMonitor) checkAndFixDNS() error {
 
 	// Check if our DNS server is still the primary DNS
 	if !dm.isOurDNSActive(currentDNS) {
-		log.Println("DNS hijack detected! Restoring Keyphy DNS server...")
+		log.Println("DNS tampering detected! Restoring Keyphy DNS server...")
 		
-		// Re-hijack system DNS
-		if err := dm.manager.hijackSystemDNS(); err != nil {
-			log.Printf("Failed to restore DNS hijack: %v", err)
+		// Re-configure system DNS redirection
+		if err := dm.manager.configureSystemDNSRedirection(); err != nil {
+			log.Printf("Failed to restore DNS redirection: %v", err)
 			return err
 		}
 		
-		log.Println("DNS hijack restored successfully")
+		log.Println("DNS redirection restored successfully")
 	}
 
 	return nil

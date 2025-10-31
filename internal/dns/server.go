@@ -6,8 +6,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
-
 	"github.com/miekg/dns"
 )
 
@@ -35,8 +33,8 @@ func (ds *DNSServer) Start() error {
 	mux := dns.NewServeMux()
 	mux.HandleFunc(".", ds.handleDNSRequest)
 
-	// Try ports in order: 6666, 5353 (avoid 53 for now)
-	ports := []string{":6666", ":5353"}
+	// Try ports in order: 53, 6666, 5353
+	ports := []string{":53", ":6666", ":5353"}
 	
 	for _, port := range ports {
 		ds.server = &dns.Server{
@@ -190,4 +188,35 @@ func (ds *DNSServer) forwardToUpstream(msg *dns.Msg, question dns.Question) {
 
 func (ds *DNSServer) IsRunning() bool {
 	return ds.running
+}
+
+func (ds *DNSServer) IsRunningOnPort53() bool {
+	return ds.running && ds.server != nil && ds.server.Addr == ":53"
+}
+
+func (ds *DNSServer) RestartOnPort53() error {
+	// Stop current server
+	if err := ds.Stop(); err != nil {
+		return err
+	}
+	
+	// Try to start on port 53
+	mux := dns.NewServeMux()
+	mux.HandleFunc(".", ds.handleDNSRequest)
+	
+	ds.server = &dns.Server{
+		Addr:    ":53",
+		Net:     "udp",
+		Handler: mux,
+	}
+	
+	log.Println("Trying to start DNS server on :53")
+	
+	if err := ds.tryStartServer(); err != nil {
+		return fmt.Errorf("failed to start on port 53: %v", err)
+	}
+	
+	ds.running = true
+	log.Println("DNS server restarted successfully on :53")
+	return nil
 }

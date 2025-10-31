@@ -22,6 +22,7 @@ type Daemon struct {
 	networkBlocker *blocker.NetworkBlocker
 	fileBlocker    *blocker.FileBlocker
 	sysMonitor     *system.SystemMonitor
+	protection     *ServiceProtection
 	running        bool
 	blocksActive   bool
 	ctx            context.Context
@@ -35,6 +36,7 @@ func NewDaemon() *Daemon {
 		networkBlocker: blocker.NewNetworkBlocker(),
 		fileBlocker:    blocker.NewFileBlocker(),
 		sysMonitor:     system.NewSystemMonitor(),
+		protection:     NewServiceProtection(),
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -74,6 +76,11 @@ func (d *Daemon) startDaemon() error {
 	}
 	d.blocksActive = true
 
+	// Start service protection
+	if err := d.protection.Start(); err != nil {
+		log.Printf("Warning: Service protection failed to start: %v", err)
+	}
+	
 	// Start monitoring goroutines
 	go d.monitorDevices()
 	go d.monitorNetwork()
@@ -98,6 +105,12 @@ func (d *Daemon) stopDaemon() error {
 	log.Println("Stopping keyphy daemon...")
 	d.cancel()
 	d.running = false
+
+	// Stop service protection
+	if d.protection != nil {
+		d.protection.Stop()
+		d.protection.RemoveProtection()
+	}
 
 	// Remove all blocks when stopping
 	if err := d.removeAllBlocks(); err != nil {

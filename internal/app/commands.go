@@ -176,6 +176,18 @@ func performReset() error {
 			
 			fmt.Println("Resetting keyphy system...")
 			
+			// Emergency: Remove service protection first
+			fmt.Println("Removing service protection...")
+			protection := service.NewServiceProtection()
+			if err := protection.RemoveProtection(); err != nil {
+				fmt.Printf("Warning: Failed to remove service protection: %v\n", err)
+			}
+			
+			// Force kill any running keyphy processes
+			fmt.Println("Terminating all keyphy processes...")
+			exec.Command("pkill", "-f", "keyphy").Run()
+			exec.Command("systemctl", "stop", "keyphy").Run()
+			
 			// Stop service properly
 			fmt.Println("Stopping service...")
 			sm, err := service.NewServiceManager()
