@@ -5,7 +5,6 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/keyphy service run-daemon
-ExecStop=/usr/local/bin/keyphy service stop
 Restart=always
 RestartSec=2
 User=root

@@ -183,10 +183,6 @@ func performReset() error {
 				fmt.Printf("Warning: Failed to remove service protection: %v\n", err)
 			}
 			
-			// Force kill any running keyphy processes
-			fmt.Println("Terminating all keyphy processes...")
-			exec.Command("pkill", "-f", "keyphy").Run()
-			exec.Command("systemctl", "stop", "keyphy").Run()
 			
 			// Stop service properly
 			fmt.Println("Stopping service...")
@@ -247,8 +243,14 @@ func performReset() error {
 			} else {
 				fmt.Println("Configuration cleared successfully")
 			}
+			fmt.Println("Keyphy system reset complete - all blocks removed, auth cleared, and service stopped")
+	
+			// Force kill any running keyphy processes
+			fmt.Println("Terminating all keyphy processes...")
+			exec.Command("pkill", "-f", "keyphy").Run()
+			exec.Command("systemctl", "stop", "keyphy").Run()
 			
-	fmt.Println("Keyphy system reset complete - all blocks removed, auth cleared, and service stopped")
+
 	return nil
 }
 

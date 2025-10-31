@@ -45,8 +45,15 @@ func NewServiceManager() (*ServiceManager, error) {
 		Executable:  execPath,
 		Arguments:   []string{"service", "run-daemon"},
 		Option: service.KeyValue{
-			"RunAtLoad": false, // Don't auto-start
-			"KeepAlive": true,
+			"KeepAlive":       true,
+			"Restart":        "always",
+			"RestartSec":     "2",
+			"KillMode":       "mixed",
+			"TimeoutStopSec": "30",
+			"OOMScoreAdjust": "-1000",
+			"ProtectSystem":  "false",
+			"ProtectHome":    "false",
+			"NoNewPrivileges": "false",
 		},
 	}
 

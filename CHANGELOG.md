@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4]
+
+### Added
+- Custom DNS server with domain blocking on port 53 for unbypassable website blocking
+- Service protection daemon with auto-restart and tamper detection
+- Emergency DNS restoration when service is terminated unexpectedly
+- Cross-platform DNS redirection using systemd-resolved and NetworkManager
+- IP address blocking functionality for comprehensive network control
+- DNS integrity monitoring with automatic configuration restoration
+
+### Security
+- DNS-based blocking system virtually impossible to bypass
+- Service protection prevents unauthorized termination
+- Emergency reset command with service protection bypass
+- Proper DNS restoration to prevent system DNS breakage
+- Enhanced service configuration with systemd security options
+
+### Fixed
+- Critical DNS restoration issue when service stops
+- Circular dependency in systemd service configuration
+- Service stopping problems with proper authentication flow
+- DNS system integration with fallback mechanisms
+
+### Changed
+- Replaced hosts file blocking with custom DNS server approach
+- Simplified DNS restoration using systemctl restart method
+- Removed complex DNS restoration methods in favor of reliable approach
+- Updated service configuration to match keyphy.service template
+
 ## [1.0.3]
 
 ### Added
