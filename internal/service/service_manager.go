@@ -39,7 +39,7 @@ func NewServiceManager() (*ServiceManager, error) {
 	}
 
 	svcConfig := &service.Config{
-		Name:        "com.keyphy.daemon",
+		Name:        "keyphy",
 		DisplayName: "Keyphy Access Control",
 		Description: "System access control using external device authentication",
 		Executable:  execPath,
@@ -254,11 +254,11 @@ func (sm *ServiceManager) execWithSudo(action string) (string, error) {
 func GetServiceConfigPath() string {
 	switch service.Platform() {
 	case "linux-systemd":
-		return "/etc/systemd/system/com.keyphy.daemon.service"
+		return "/etc/systemd/system/keyphy.service"
 	case "darwin-launchd":
 		return "/Library/LaunchDaemons/com.keyphy.daemon.plist"
 	case "windows-service":
-		return "Registry: HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\com.keyphy.daemon"
+		return "Registry: HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\keyphy"
 	default:
 		return "Unknown platform"
 	}

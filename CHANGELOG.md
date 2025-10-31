@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.3] - 2025-01-03
+## [1.0.3]
 
 ### Added
 - Integrated `github.com/shirou/gopsutil/v3` for comprehensive system monitoring
@@ -35,7 +35,7 @@ All notable changes to this project will be documented in this file.
 - Enhanced authentication validation with comprehensive status reporting
 - Improved system monitoring with configurable check intervals
 
-## [1.0.2] - 2025-10-30
+## [1.0.2]
 
 ### Added
 - Service watchdog functionality to auto-restart if service is killed manually
@@ -64,7 +64,7 @@ All notable changes to this project will be documented in this file.
 - Improved service status reporting with readable status strings
 - Enhanced network blocking with both IPv4 and IPv6 iptables/pfctl rules
 
-## [1.0.1] - 2025-10-30
+## [1.0.1]
 
 ### Fixed
 - Fixed daemon process monitoring continuing to kill processes after unlock signal
@@ -72,7 +72,7 @@ All notable changes to this project will be documented in this file.
 - Resolved issue where applications like htop were killed even when blocks were disabled
 - Improved daemon state management for lock/unlock operations
 
-## [1.0.0] - 2025-10-30
+## [1.0.0]
 
 ### Added
 - Initial release of Keyphy

@@ -196,6 +196,8 @@ func performReset() error {
 			
 			// Clear all configuration including auth device
 			fmt.Println("Clearing configuration...")
+			// Ensure config file is unprotected before clearing
+			config.UnprotectConfigFile()
 			cfg.BlockedApps = []string{}
 			cfg.BlockedWebsites = []string{}
 			cfg.BlockedPaths = []string{}

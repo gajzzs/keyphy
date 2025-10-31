@@ -40,3 +40,4 @@ config.json
 
 # Logs
 *.log
+TEST_RESULTS.md

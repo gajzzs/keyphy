@@ -9,7 +9,7 @@ import (
 	"github.com/gajzzs/keyphy/internal/config"
 )
 
-var version = "dev"
+var version = "v1.0.0-crossplatform"
 
 var rootCmd = &cobra.Command{
 	Use:     "keyphy",

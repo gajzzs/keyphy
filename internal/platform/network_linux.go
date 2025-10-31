@@ -193,7 +193,8 @@ func (nm *linuxNetworkManager) UnblockAll() error {
 
 func (nm *linuxNetworkManager) ProtectHostsFile() error {
 	// Use syscall to set immutable attribute
-	file, err := os.Open("/etc/hosts")
+	// Need to open with write permissions for ioctl to work
+	file, err := os.OpenFile("/etc/hosts", os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}
@@ -216,7 +217,8 @@ func (nm *linuxNetworkManager) ProtectHostsFile() error {
 
 func (nm *linuxNetworkManager) UnprotectHostsFile() error {
 	// Use syscall to remove immutable attribute
-	file, err := os.Open("/etc/hosts")
+	// Need to open with write permissions for ioctl to work
+	file, err := os.OpenFile("/etc/hosts", os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,8 @@ import (
 	"github.com/gajzzs/keyphy/internal/platform"
 )
 
+// check if keyphy dameom is run by manually or using default service provider
+
 type NetworkBlocker struct {
 	manager platform.NetworkManager
 }

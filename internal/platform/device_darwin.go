@@ -44,13 +44,13 @@ func (dm *macDeviceManager) ListUSBDevices() ([]Device, error) {
 	var devices []Device
 	for _, disk := range diskutil.AllDisksAndPartitions {
 		for _, partition := range disk.Partitions {
-			// Use VolumeUUID if available, otherwise use DeviceIdentifier
+			// Consistent UUID strategy: prefer VolumeUUID, fallback to DeviceIdentifier
 			uuid := partition.VolumeUUID
 			if uuid == "" {
-				uuid = partition.DeviceIdentifier
+				uuid = "NO-UUID-" + partition.DeviceIdentifier // Consistent with Linux
 			}
 			
-			// Use VolumeName if available, otherwise use DeviceIdentifier
+			// Consistent naming: prefer VolumeName, fallback to DeviceIdentifier
 			name := partition.VolumeName
 			if name == "" {
 				name = partition.DeviceIdentifier
